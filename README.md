@@ -8,7 +8,7 @@
 
 ---
 
-## 📱 Build Information
+## Build Information
 
 - **OS Version:** Android 17 (Baklava / VanillaIceCream Next)
 - **API Level:** 37
@@ -27,40 +27,35 @@
 
 ---
 
-## ✨ Features & Highlights
+## Features & Highlights
 
-### 1. 🔍 Pixel Dock Quick Search Box (QSB)
+### 1. Pixel Dock Quick Search Box (QSB)
 - Fully integrated Google Search pill docked at the bottom of the home screen (`Launcher3QuickStep`).
 - One-tap access to **Google Search**, **Voice Search**, and **Google Lens**.
 - Scalable phone grid profiles (`3x3`, `4x4`, `5x5`) dynamically calculate QSB dimensions without layout clipping.
 - Legacy AOSP `QuickSearchBox` and `Jelly` completely removed.
 
-### 2. 🛡️ BlazeHouse Customization Suite
+### 2. BlazeHouse Customization Suite
 - **Custom Lockscreen Clock Engine:** Dual-mode clock architecture with exclusive lockscreen clock source selection (System Clock vs. BlazeHouse Styles) preventing overlapping views.
 - **Status Bar Clock Customization:** Multi-position support (**Left**, **Center**, **Right**), AM/PM toggles, seconds counter, and dynamic date formatting.
 - **Lockscreen Charging Info:** Real-time charging telemetry showing wattage, voltage, battery temperature, and estimated full charge time (`% • Hızlı şarj oluyor • 15W • 4.2V • 30.5°C`).
 
-### 3. 🎭 Advanced Device & Hardware Spoofing
+### 3. Advanced Device & Hardware Spoofing
 - **TrickyStore & Play Integrity Fix (PIF):** Embedded keystore and attestation framework to maintain integrity on unlocked bootloaders.
 - **Pixel Props Engine:** Spoof device properties on a per-app basis as Google Pixel 11 Pro XL, Pixel 9 Pro XL, or any supported target.
 - **Tensor Feature Targets:** Expose Google Tensor-exclusive AI features to selected system and third-party apps.
 - **App-Specific Spoofing:** One-click toggles for unlimited **Google Photos** storage and **Snapchat** optimization.
 
-### 4. 📸 Secure Window Capture (`FLAG_SECURE` Bypass)
+### 4. Secure Window Capture (`FLAG_SECURE` Bypass)
 - Screenshot and screen recording restrictions (`FLAG_SECURE`) can be completely bypassed via **BlazeHouse -> Miscellaneous**.
 - Tested and verified on **Firefox Private Browsing (Incognito)**, banking previews, and DRM protected layers without black screen artifacts.
 
-### 5. ⛅ Integrated Google Experience & Circle to Search
-- **Native Google Weather:** Launch Google's full-screen pixel weather experience with 10-day forecasts, radar, and frog mascot directly from the launcher (`Weather` / `Hava Durumu`).
-- **YouTube & Gmail:** Cleanly integrated into the system product image.
-- **Circle to Search (Contextual Search):** Enabled via framework `ContextualSearchManagerService` connected to Google App (`Velvet`).
-
-### 6. 🔊 Modern Pixel 9 Pro Sound Pack
+### 5. Modern Pixel 9 Pro Sound Pack
 - Outdated legacy KitKat UI sounds replaced with modern, crisp audio effects from the Pixel 9 Pro (`camera_click.ogg`, `Lock.ogg`, `Unlock.ogg`, `ChargingStarted.ogg`, `Effect_Tick.ogg`, `VideoRecord.ogg`).
 
 ---
 
-## 📦 How to Reassemble the GSI Image
+## How to Reassemble the GSI Image
 
 Because GitHub enforces a 100 MB per-file upload limit, the compressed `system.img.gz` (1.7 GB) is split into 20 chunks of 90 MB each (`system.img.gz.part00` through `system.img.gz.part19`).
 
@@ -101,7 +96,7 @@ Get-FileHash system.img.gz -Algorithm SHA256
 
 ---
 
-## 🚀 Installation Instructions
+## Installation Instructions
 
 ### Method 1: DSU (Dynamic System Update) — Recommended (Safe & Reversible)
 DSU allows booting and testing BlazeAOSP without wiping your current ROM or modifying physical partitions.
