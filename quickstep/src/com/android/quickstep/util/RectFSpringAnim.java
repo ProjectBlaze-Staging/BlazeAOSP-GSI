@@ -23,6 +23,7 @@ import android.content.Context;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.os.SystemClock;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
@@ -32,6 +33,7 @@ import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 
 import com.android.launcher3.DeviceProfile;
+import com.android.launcher3.QuickstepTransitionManager;
 import com.android.launcher3.R;
 import com.android.launcher3.Utilities;
 import com.android.launcher3.util.DynamicResource;
@@ -105,6 +107,7 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
     private SpringAnimation mRectYSpring;
     private SpringAnimation mRectScaleAnim;
     private boolean mAnimsStarted;
+    private boolean mPaused;
     private boolean mRectXAnimEnded;
     private boolean mRectYAnimEnded;
     private boolean mRectScaleAnimEnded;
@@ -129,6 +132,9 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
     protected final float mDampingX;
     protected final float mDampingY;
     protected final float mRectStiffness;
+    private final float mRectDamping;
+    private final boolean mCos;
+    private long mCosStartTime;
 
     public RectFSpringAnim(SpringConfig config) {
         mStartRect = config.startRect;
@@ -143,6 +149,8 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
         mDampingX = config.dampingX;
         mDampingY = config.dampingY;
         mRectStiffness = config.rectStiffness;
+        mRectDamping = config.rectDamping;
+        mCos = config.cos;
 
         mCurrentY = getTrackedYFromRect(mStartRect);
     }
@@ -164,7 +172,7 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
     }
 
     public void onTargetPositionChanged() {
-        if (isEnded()) {
+        if (isEnded() || mPaused) {
             return;
         }
 
@@ -203,12 +211,87 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
      * @param velocityPxPerMs Velocity of swipe in px/ms.
      */
     public void start(Context context, @Nullable DeviceProfile profile, PointF velocityPxPerMs) {
+        startSprings(context, velocityPxPerMs);
+        for (Animator.AnimatorListener animatorListener : mAnimatorListeners) {
+            animatorListener.onAnimationStart(null);
+        }
+    }
+
+    /**
+     * Holds the rect where it is, without ending the animation, so it can follow a finger.
+     */
+    public void pause() {
+        if (!mAnimsStarted || mPaused || isEnded()) {
+            return;
+        }
+        mPaused = true;
+        mRectXSpring.cancel();
+        mRectYSpring.cancel();
+        mRectScaleAnim.cancel();
+    }
+
+    /**
+     * Moves a paused rect by the given offset. Dragging down grows it back towards its start size.
+     */
+    public void dragBy(float dx, float dy) {
+        if (!mPaused) {
+            return;
+        }
+        mCurrentCenterX += dx;
+        mCurrentY += dy;
+        mCurrentScaleProgress = Utilities.boundToRange(
+                mCurrentScaleProgress - dy / mStartRect.height(), 0f, 1f);
+        onUpdate();
+    }
+
+    /**
+     * Springs a paused rect on to its target, starting at the given velocity.
+     */
+    public void resume(Context context, PointF velocityPxPerMs) {
+        if (!mPaused) {
+            return;
+        }
+        mPaused = false;
+        mRectXAnimEnded = false;
+        mRectYAnimEnded = false;
+        mRectScaleAnimEnded = false;
+        startSprings(context, velocityPxPerMs);
+    }
+
+    public boolean isRunning() {
+        return mAnimsStarted && !isEnded();
+    }
+
+    /**
+     * How far the window has given way to its icon. ColorOS 17 starts the swap a couple of frames
+     * after the finger lifts and has it half done at 75 ms and all but done by 175 ms.
+     */
+    public float getCosFadeProgress() {
+        if (mCosStartTime == 0) {
+            return 0f;
+        }
+        float t = Math.max(0, SystemClock.uptimeMillis() - mCosStartTime - 17) / 1000f;
+        float wt = 30f * t;
+        return 1 - (1 + wt) * (float) Math.exp(-wt);
+    }
+
+    public boolean isCos() {
+        return mCos;
+    }
+
+    public RectF getCurrentRect() {
+        return mCurrentRect;
+    }
+
+    private void startSprings(Context context, PointF velocityPxPerMs) {
         // Only tell caller that we ended if both x and y animations have ended.
         OnAnimationEndListener onXEndListener = ((animation, canceled, centerX, velocityX) -> {
+            if (mPaused) return;
             mRectXAnimEnded = true;
             maybeOnEnd();
         });
         OnAnimationEndListener onYEndListener = ((animation, canceled, centerY, velocityY) -> {
+            if (mPaused) return;
             mRectYAnimEnded = true;
             maybeOnEnd();
         });
@@ -236,6 +319,11 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
         yVelocityPxPerS = adjustVelocity(
                 yVelocityPxPerS, minVelocityYPxPerS, maxVelocityYPxPerS, fallOffFactor);
 
+        if (mCos) {
+            if ((endX - startX) * xVelocityPxPerS < 0) xVelocityPxPerS *= 0.25f;
+            if ((endY - startY) * yVelocityPxPerS < 0) yVelocityPxPerS *= 0.25f;
+        }
+
         mRectXSpring =
                 new SpringAnimation(this, RECT_CENTER_X)
                         .setSpring(
@@ -257,17 +345,26 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
                         .setStartVelocity(yVelocityPxPerS)
                         .addEndListener(onYEndListener);
 
-        float dampingZ = rp.getFloat(R.dimen.swipe_up_rect_scale_damping_ratio_v2);
+        float scaleVelocity = velocityPxPerMs.y * minVisibleChange;
+        if (mCos) {
+            scaleVelocity = Utilities.boundToRange(
+                    -velocityPxPerMs.y * 1000 / mStartRect.height(), 0f, 8f);
+            mCosStartTime = SystemClock.uptimeMillis();
+        }
+        float dampingZ = mRectDamping >= 0 ? mRectDamping
+                : rp.getFloat(R.dimen.swipe_up_rect_scale_damping_ratio_v2);
         mRectScaleAnim =
                 new SpringAnimation(this, RECT_SCALE_PROGRESS)
                         .setSpring(
                                 new SpringForce(1f)
                                         .setStiffness(mRectStiffness)
                                         .setDampingRatio(dampingZ))
-                        .setStartVelocity(velocityPxPerMs.y * minVisibleChange)
-                        .setMaxValue(1f)
+                        .setStartVelocity(scaleVelocity)
+                        // ColorOS lets the size spring pass its target for the landing bounce.
+                        .setMaxValue(mCos ? 1.25f : 1f)
                         .setMinimumVisibleChange(minVisibleChange)
                         .addEndListener((animation, canceled, value, velocity) -> {
+                            if (mPaused) return;
                             mRectScaleAnimEnded = true;
                             maybeOnEnd();
                         });
@@ -279,12 +376,10 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
         mRectYSpring.start();
 
         mRectScaleAnim.start();
-        for (Animator.AnimatorListener animatorListener : mAnimatorListeners) {
-            animatorListener.onAnimationStart(null);
-        }
     }
 
     public void end() {
+        mPaused = false;
         if (mAnimsStarted) {
             if (mRectXSpring.canSkipToEnd()) {
                 mRectXSpring.skipToEnd();
@@ -326,6 +421,11 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
                     mTargetRect.width());
             float currentHeight = Utilities.mapRange(mCurrentScaleProgress, mStartRect.height(),
                     mTargetRect.height());
+            if (mCos && mStartRect.width() > 0 && mTargetRect.width() > 0) {
+                currentHeight = currentWidth * Utilities.mapRange(mCurrentScaleProgress,
+                        mStartRect.height() / mStartRect.width(),
+                        mTargetRect.height() / mTargetRect.width());
+            }
             switch (mTracking) {
                 case TRACKING_TOP:
                     mCurrentRect.set(mCurrentCenterX - currentWidth / 2,
@@ -347,7 +447,9 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
                     break;
             }
             for (OnUpdateListener onUpdateListener : mOnUpdateListeners) {
-                onUpdateListener.onUpdate(mCurrentRect, mCurrentScaleProgress);
+                // Only the rect follows the bounce past the target; progress-driven effects
+                // (alpha, corner radius, home play fraction) stay within [0, 1].
+                onUpdateListener.onUpdate(mCurrentRect, Math.min(1f, mCurrentScaleProgress));
             }
         }
     }
@@ -417,6 +519,8 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
         protected float dampingX;
         protected float dampingY;
         protected float rectStiffness;
+        protected float rectDamping = -1f;
+        protected boolean cos;
         protected float minVisChange;
         protected int maxVelocityPxPerS;
 
@@ -435,6 +539,9 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
      */
     public static class DefaultSpringConfig extends SpringConfig {
 
+        /** ColorOS lets the landing icon dip to about 95% of its size. */
+        private static final float COS_CLOSE_BOUNCE_SIZE_FRACTION = 0.05f;
+
         public DefaultSpringConfig(Context context, DeviceProfile deviceProfile,
                 RectF startRect, RectF targetRect) {
             super(context, startRect, targetRect);
@@ -446,9 +553,39 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
             dampingX = rp.getFloat(R.dimen.swipe_up_rect_x_damping_ratio);
             dampingY = rp.getFloat(R.dimen.swipe_up_rect_y_damping_ratio);
             rectStiffness = rp.getFloat(R.dimen.swipe_up_rect_scale_stiffness_v2);
+            if (QuickstepTransitionManager.cosExperience(context)) {
+                // ColorOS 17 flies a closing window home at about 18 rad/s for size and x, y a
+                // little softer, measured from its SurfaceFlinger layers. It lands on the icon
+                // with a bounce of a fixed size: on the OP13 the icon passes about 6dp beyond its
+                // spot and dips to about 95% of its size (damping 0.79 and 0.82 for the travel on
+                // that phone). Derive the damping from the travel so that a longer flight on a
+                // larger screen bounces by the same amount.
+                stiffnessX = 330f;
+                dampingX = 1f;
+                stiffnessY = 250f;
+                dampingY = cosBounceDamping(
+                        rp.getDimension(R.dimen.cos_close_bounce_distance),
+                        Math.abs(targetRect.centerY() - startRect.centerY()));
+                rectStiffness = 330f;
+                rectDamping = cosBounceDamping(
+                        COS_CLOSE_BOUNCE_SIZE_FRACTION * targetRect.width(),
+                        startRect.width() - targetRect.width());
+                cos = true;
+            }
 
             this.startRect = startRect;
             this.targetRect = targetRect;
+        }
+
+        /**
+         * Damping ratio for which a spring released from rest overshoots its target by
+         * {@code overshoot} after travelling {@code distance}.
+         */
+        private static float cosBounceDamping(float overshoot, float distance) {
+            if (overshoot <= 0f || distance <= overshoot) return 1f;
+            double l = Math.log(overshoot / distance);
+            return Utilities.boundToRange(
+                    (float) (-l / Math.sqrt(Math.PI * Math.PI + l * l)), 0.5f, 1f);
         }
 
         private @Tracking int getDefaultTracking(@Nullable DeviceProfile deviceProfile) {

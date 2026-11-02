@@ -15,7 +15,7 @@
   ~ limitations under the License.
   -->
 <com.android.launcher3.BubbleTextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="0dp"
+    android:layout_width="match_parent"
     android:layout_height="@dimen/qsb_default_widget_height"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_weight="1"

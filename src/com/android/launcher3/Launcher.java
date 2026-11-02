@@ -1982,6 +1982,11 @@ public class Launcher extends StatefulActivity<LauncherState>
             return result;
         }
 
+        if (mOnDeferredActivityLaunchCallback != null) {
+            mOnDeferredActivityLaunchCallback.run();
+            mOnDeferredActivityLaunchCallback = null;
+        }
+
         RunnableList result = super.startActivitySafely(v, intent, item);
         if (shouldShowHomeBehindDesktop()) {
             Runnable endAction = () -> {
@@ -2662,6 +2667,16 @@ public class Launcher extends StatefulActivity<LauncherState>
     @Override
     public StateManager<LauncherState, Launcher> getStateManager() {
         return mStateManager;
+    }
+
+    private boolean mHomeRevealAnimationRunning;
+
+    public boolean isHomeRevealAnimationRunning() {
+        return mHomeRevealAnimationRunning;
+    }
+
+    public void setHomeRevealAnimationRunning(boolean running) {
+        mHomeRevealAnimationRunning = running;
     }
 
     public PopupController<Launcher> getPopupControllerForHomeScreenItems() {

@@ -457,6 +457,9 @@ public class QuickstepLauncher extends Launcher implements RecentsViewContainer,
 
     @Override
     protected void onScreenOnChanged(boolean isOn) {
+        if (!isOn && mAppTransitionManager != null) {
+            mAppTransitionManager.cancelImmediateAppLaunch();
+        }
         if (!isOn && isRecentsViewVisible()) {
             ((RecentsView) getOverviewPanel()).startHome();
         } else {
@@ -466,12 +469,14 @@ public class QuickstepLauncher extends Launcher implements RecentsViewContainer,
 
     @Override
     public RunnableList startActivitySafely(View v, Intent intent, ItemInfo item) {
+        if (mAppTransitionManager != null) mAppTransitionManager.beginImmediateAppLaunch(v, item);
         PredictionRowView<?> predictionRowView =
                 getAppsView().getFloatingHeaderView().findFixedRowByType(PredictionRowView.class);
         // Pause the prediction row updates until the transition (if it exists) ends.
         predictionRowView.setPredictionUiUpdatePaused(true);
         RunnableList result = super.startActivitySafely(v, intent, item);
         if (result == null) {
+            if (mAppTransitionManager != null) mAppTransitionManager.cancelImmediateAppLaunch(v);
             predictionRowView.setPredictionUiUpdatePaused(false);
         } else {
             result.add(() -> predictionRowView.setPredictionUiUpdatePaused(false));
@@ -931,6 +936,10 @@ public class QuickstepLauncher extends Launcher implements RecentsViewContainer,
 
     @Override
     protected void onNewIntent(Intent intent) {
+        if (Intent.ACTION_MAIN.equals(intent.getAction())
+                && intent.hasCategory(Intent.CATEGORY_HOME) && mAppTransitionManager != null) {
+            mAppTransitionManager.cancelImmediateAppLaunch();
+        }
         boolean intentHasGestureNavContract = GestureNavContract.canBuildFromIntent(intent);
         super.onNewIntent(intent);
         var conn = mSysUIConnectionTracker.getActiveComponent().getValue();

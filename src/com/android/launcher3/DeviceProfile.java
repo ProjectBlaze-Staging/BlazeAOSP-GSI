@@ -512,7 +512,7 @@ public class DeviceProfile {
      * necessary.
      */
     public void recalculateHotseatWidthAndBorderSpace(int hotseatIcons) {
-        mHotseatProfile.recalculateHotseatWidthAndBorderSpace(
+        mHotseatProfile = mHotseatProfile.recalculateHotseatWidthAndBorderSpace(
                 inv,
                 this,
                 hotseatIcons

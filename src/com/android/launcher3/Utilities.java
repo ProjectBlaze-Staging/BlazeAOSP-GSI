@@ -942,4 +942,8 @@ public final class Utilities {
         return reduceWorkspaceBlurUsage() && context.getResources().getBoolean(
                 R.bool.reduce_workspace_blur_usage);
     }
+
+    public static boolean blurBackgroundAtAppLaunch(Context context) {
+        return LauncherPrefs.BLUR_BACKGROUND_AT_APP_LAUNCH.get(context);
+    }
 }

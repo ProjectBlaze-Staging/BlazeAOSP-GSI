@@ -145,14 +145,25 @@ data class HotseatProfile(
             isVerticalBarLayout: Boolean,
             numShownHotseatIconsParam: Int,
         ): HotseatWithBorderAndSpace {
-            if (!isScalableGrid)
+            if (!isScalableGrid) {
+                val borderAndSpace =
+                    HotseatBorderAndSpace(borderSpace = 0, widthPx = 0, columnSpan = inv.numColumns)
                 return HotseatWithBorderAndSpace(
                     widthPx = 0,
                     numShownIcons = numShownHotseatIconsParam,
                     columnSpan = inv.numColumns,
-                    qsbWidth = 0,
+                    qsbWidth =
+                        calculateQsbWidth(
+                            borderAndSpace = borderAndSpace,
+                            workspaceProfile = workspaceProfile,
+                            inv = inv,
+                            panelCount = panelCount,
+                            numShownHotseatIcons = numShownHotseatIconsParam,
+                            isQsbInline = hotseatProfileInitialValues.isQsbInline,
+                        ),
                     borderSpace = 0,
                 )
+            }
 
             var numShownHotseatIcons = numShownHotseatIconsParam
             var borderAndSpace =

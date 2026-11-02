@@ -17,6 +17,9 @@ package com.android.quickstep.util;
 
 import static android.os.Trace.TRACE_TAG_APP;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ObjectAnimator;
 import android.app.WallpaperManager;
 import android.content.Context;
 import android.gui.EarlyWakeupInfo;
@@ -26,12 +29,15 @@ import android.os.Trace;
 import android.util.FloatProperty;
 import android.util.Log;
 import android.view.SurfaceControl;
+import android.view.animation.Interpolator;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.android.app.animation.Interpolators;
 import com.android.launcher3.Flags;
+import com.android.launcher3.LauncherPrefs;
+import com.android.launcher3.QuickstepTransitionManager;
 import com.android.launcher3.R;
 import com.android.launcher3.Utilities;
 import com.android.launcher3.anim.AnimatedFloat;
@@ -98,8 +104,12 @@ public class BaseDepthControllerImpl<
      * @see android.service.wallpaper.WallpaperService.Engine#onZoomChanged(float)
      */
     private float mDepth;
+    private float mLastWallpaperZoom = -1f;
     // Used just for animating wallpaper zoom without affecting blur.
     private final AnimatedFloat mWallpaperZoomOnly = new AnimatedFloat(this::applyDepthAndBlur);
+    private final AnimatedFloat mAnimatedWallpaperDepth =
+            new AnimatedFloat(this::applyDepthAndBlur, Float.NaN);
+    private ObjectAnimator mWallpaperDepthAnimator;
 
     protected SurfaceControl mBaseSurface;
     protected SurfaceControl mBaseSurfaceOverride;
@@ -114,6 +124,10 @@ public class BaseDepthControllerImpl<
 
     /** Pause blur but allow transparent, can be used when launch something behind the container. */
     protected boolean mPauseBlurs;
+
+    /** The depth at and above which the blur is at its full radius. */
+    private float mFullBlurDepth = DEFAULT_FULL_BLUR_DEPTH;
+    private static final float DEFAULT_FULL_BLUR_DEPTH = 0.3f;
 
     /**
      * Last blur value, in pixels, that was applied.
@@ -197,6 +211,62 @@ public class BaseDepthControllerImpl<
         mHasContentBehindContainer = hasContentBehindContainer;
     }
 
+    /**
+     * Sets the depth at which the blur reaches its full radius, below which it thins out in step
+     * with the depth; {@code Float.NaN} restores the default. A transition that wants the blur to
+     * follow its whole depth curve, rather than hold until the depth is nearly gone, raises it to
+     * its starting depth.
+     */
+    public void setFullBlurDepth(float depth) {
+        float fullBlurDepth = Float.isNaN(depth) || depth <= 0 ? DEFAULT_FULL_BLUR_DEPTH : depth;
+        if (mFullBlurDepth == fullBlurDepth) {
+            return;
+        }
+        mFullBlurDepth = fullBlurDepth;
+        applyDepthAndBlur();
+    }
+
+    /** Wallpaper can settle after the window/content, as on COS, without keeping their blur. */
+    public Animator animateWallpaperDepth(float fromDepth, float toDepth, long duration,
+            Interpolator interpolator) {
+        if (mWallpaperDepthAnimator != null) {
+            mWallpaperDepthAnimator.cancel();
+        }
+        float start = Float.isNaN(mAnimatedWallpaperDepth.value)
+                ? fromDepth : mAnimatedWallpaperDepth.value;
+        mAnimatedWallpaperDepth.updateValue(start);
+        ObjectAnimator animator = ObjectAnimator.ofFloat(
+                mAnimatedWallpaperDepth, AnimatedFloat.VALUE, start, toDepth);
+        animator.setDuration(duration);
+        animator.setInterpolator(interpolator);
+        mWallpaperDepthAnimator = animator;
+        animator.addListener(new AnimatorListenerAdapter() {
+            private boolean mCancelled;
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                mCancelled = true;
+            }
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (mWallpaperDepthAnimator == animation) {
+                    mWallpaperDepthAnimator = null;
+                    if (!mCancelled) {
+                        mAnimatedWallpaperDepth.updateValue(Float.NaN);
+                    }
+                }
+            }
+        });
+        return animator;
+    }
+
+    /** Restore state-driven zoom only when home has no transition left to own it. */
+    public void resetWallpaperDepth() {
+        if (mWallpaperDepthAnimator != null) {
+            mWallpaperDepthAnimator.cancel();
+        }
+        mAnimatedWallpaperDepth.updateValue(Float.NaN);
+    }
+
     public void pauseBlursOnWindows(boolean pause) {
         if (mPauseBlurs == pause) {
             return;
@@ -227,13 +297,32 @@ public class BaseDepthControllerImpl<
             boolean applyImmediately, boolean skipSimilarBlur) {
 
         IBinder windowToken = mContainer.getRootView().getWindowToken();
-        float wallpaperZoom = mDepth;
+        float wallpaperZoom = Float.isNaN(mAnimatedWallpaperDepth.value)
+                ? mDepth : mAnimatedWallpaperDepth.value;
         if (Flags.enableExpressiveFolderExpansion()) {
             wallpaperZoom = Math.max(wallpaperZoom, mWallpaperZoomOnly.value);
         }
 
-        if (windowToken != null) {
+        // Android zoomOut=0 is the largest scale; COS instead grows the wallpaper as app
+        // depth grows. Use the same motion on phones and tablets, preserving explicit opt-out.
+        boolean cosWallpaperMotion = QuickstepTransitionManager.cosExperience(mContainer);
+        LauncherPrefs prefs = LauncherPrefs.get(mContainer);
+        boolean allowZoom = prefs.get(LauncherPrefs.ALLOW_WALLPAPER_ZOOMING)
+                || (cosWallpaperMotion && !prefs.has(LauncherPrefs.ALLOW_WALLPAPER_ZOOMING));
+        if (cosWallpaperMotion) {
+            float appDepth = mContainer.getBackgroundAppState().getDepth(mContainer);
+            wallpaperZoom = 1f - Utilities.boundToRange(
+                    wallpaperZoom / Math.max(0.01f, appDepth), 0f, 1f);
+        }
+        wallpaperZoom = allowZoom ? wallpaperZoom : 1f;
+        // The explicit wallpaper animation eases out slowly, so skipping changes under 0.01
+        // would move the wallpaper in visible steps near its end; send every frame of it.
+        float zoomThreshold = Float.isNaN(mAnimatedWallpaperDepth.value) ? 0.01f : 0f;
+        boolean wallpaperZoomChanged = Math.abs(wallpaperZoom - mLastWallpaperZoom) > zoomThreshold
+                || (wallpaperZoom != mLastWallpaperZoom && (wallpaperZoom == 0f || wallpaperZoom == 1f));
+        if (windowToken != null && wallpaperZoomChanged) {
             mWallpaperManager.setWallpaperZoomOut(windowToken, wallpaperZoom);
+            mLastWallpaperZoom = wallpaperZoom;
         }
 
         if (!BlurUtils.supportsBlursOnWindows()) {
@@ -268,8 +357,10 @@ public class BaseDepthControllerImpl<
             return;
         }
         mCurrentBlur = newBlur;
-        Log.v(TAG, "Applying blur: " + mCurrentBlur + " to " + blurSurface + " applyImmediately: "
-                + applyImmediately);
+        if (DEBUG) {
+            Log.v(TAG, "Applying blur: " + mCurrentBlur + " to " + blurSurface
+                    + " applyImmediately: " + applyImmediately);
+        }
 
         if (surfaceTransaction == null) {
             surfaceTransaction = new SurfaceTransaction();
@@ -420,9 +511,10 @@ public class BaseDepthControllerImpl<
 
     /**
      * Maps depth values to blur amounts as a percentage of the max blur.
-     * The blur percentage grows linearly with depth, and maxes out at 30% depth.
+     * The blur percentage grows linearly with depth, and maxes out at {@link #mFullBlurDepth}, 30%
+     * depth unless a transition asks for another.
      */
-    private static float mapDepthToBlur(float depth) {
-        return Interpolators.clampToProgress(depth, 0, 0.3f);
+    private float mapDepthToBlur(float depth) {
+        return Interpolators.clampToProgress(depth, 0, mFullBlurDepth);
     }
 }

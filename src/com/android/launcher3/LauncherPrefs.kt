@@ -317,6 +317,9 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
 
         @JvmField val ENABLE_COMPOSITION_TRACING = backedUpItem(COMPOSITION_TRACING_PREF_KEY, false)
 
+        @JvmField val ALLOW_WALLPAPER_ZOOMING = backedUpItem("pref_allow_wallpaper_zooming", true)
+        @JvmField val BLUR_BACKGROUND_AT_APP_LAUNCH = backedUpItem("pref_blur_background_at_app_launch", true)
+
         @JvmField
         val FIXED_LANDSCAPE_MODE = backedUpItem(SettingsActivity.FIXED_LANDSCAPE_MODE, false)
 

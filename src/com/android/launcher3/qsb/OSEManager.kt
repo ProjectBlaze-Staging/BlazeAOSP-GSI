@@ -72,9 +72,21 @@ class OSEManager(
     @VisibleForTesting var tracker: InstallSessionTracker? = null
 
     private val defaultSearchPackage =
-        (context.getSystemService(SearchManager::class.java)?.globalSearchActivity?.packageName
-                ?: context.resources.getString(R.string.fallback_search_package_name))
-            .ifEmpty { null }
+        run {
+            val fallbackPkg = context.resources.getString(R.string.fallback_search_package_name)
+            val fallbackInstalled =
+                fallbackPkg.isNotEmpty() &&
+                    ApplicationInfoWrapper(context, fallbackPkg, myUserHandle()).run {
+                        isInstalled() && !isArchived()
+                    }
+            if (fallbackInstalled) {
+                fallbackPkg
+            } else {
+                (context.getSystemService(SearchManager::class.java)?.globalSearchActivity?.packageName
+                        ?: fallbackPkg)
+                    .ifEmpty { null }
+            }
+        }
 
     /** Initialize with the current value to that there is no jump on reboot */
     private val mutableOSEInfoRef =
@@ -107,7 +119,16 @@ class OSEManager(
     @VisibleForTesting
     fun reloadOse() {
         Preconditions.assertNonUiThread()
-        val oseSettingsValue = settingsObserver.getValue()
+        val rawSettingsValue = settingsObserver.getValue()
+        val oseSettingsValue =
+            if (
+                rawSettingsValue == "com.android.quicksearchbox" &&
+                    defaultSearchPackage == "com.google.android.googlequicksearchbox"
+            ) {
+                defaultSearchPackage
+            } else {
+                rawSettingsValue
+            }
         val appInfoWrapper =
             oseSettingsValue?.let { ApplicationInfoWrapper(context, it, myUserHandle()) }
         val oseApkInstalled = appInfoWrapper?.run { isInstalled() && !isArchived() } ?: false

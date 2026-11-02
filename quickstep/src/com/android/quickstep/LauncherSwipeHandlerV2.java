@@ -19,8 +19,6 @@ import static com.android.app.animation.Interpolators.EXAGGERATED_EASE;
 import static com.android.app.animation.Interpolators.LINEAR;
 import static com.android.launcher3.LauncherState.NORMAL;
 import static com.android.launcher3.Utilities.mapBoundToRange;
-import static com.android.launcher3.views.FloatingIconView.SHAPE_PROGRESS_DURATION;
-import static com.android.quickstep.util.FloatingIconViewHelper.getFloatingIconView;
 
 import android.animation.AnimatorSet;
 import android.content.Context;
@@ -40,18 +38,17 @@ import com.android.launcher3.Flags;
 import com.android.launcher3.LauncherAnimUtils;
 import com.android.launcher3.LauncherState;
 import com.android.launcher3.anim.AnimatorPlaybackController;
-import com.android.launcher3.model.data.ItemInfo;
 import com.android.launcher3.statehandlers.DesktopVisibilityController;
 import com.android.launcher3.states.StateAnimationConfig;
 import com.android.launcher3.uioverrides.QuickstepLauncher;
 import com.android.launcher3.util.MSDLPlayerWrapper;
 import com.android.launcher3.util.StableViewInfo;
 import com.android.launcher3.views.ClipIconView;
-import com.android.launcher3.views.FloatingIconView;
 import com.android.launcher3.views.FloatingView;
 import com.android.launcher3.widget.LauncherAppWidgetHostView;
 import com.android.quickstep.util.ActiveGestureLog;
 import com.android.quickstep.util.RectFSpringAnim;
+import com.android.quickstep.util.HomeIconAnimation;
 import com.android.quickstep.util.ScalingWorkspaceRevealAnim;
 import com.android.quickstep.util.TaskViewSimulator;
 import com.android.quickstep.views.FloatingWidgetView;
@@ -132,7 +129,9 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
 
         mContainer.getRootView().setForceHideBackArrow(true);
 
-        if (mHandOffAnimationToHome || !canUseWorkspaceView || appCanEnterPip || mIsSwipeForSplit) {
+        // With the app's icon on home, fly the window into it as OxygenOS does rather than handing
+        // off to the shell, whose animation just shrinks the window away in the middle.
+        if (!canUseWorkspaceView || appCanEnterPip || mIsSwipeForSplit) {
             return new LauncherHomeAnimationFactory() {
 
                 @Nullable
@@ -142,6 +141,8 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
                 }
             };
         }
+        // This handler plays the window's flight home itself, so the shell must not as well.
+        mHandOffAnimationToHome = false;
         if (workspaceView instanceof LauncherAppWidgetHostView) {
             return createWidgetHomeAnimationFactory((LauncherAppWidgetHostView) workspaceView,
                     isTargetTranslucent, runningTaskTarget);
@@ -151,87 +152,28 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
 
     private HomeAnimationFactory createIconHomeAnimationFactory(
             View workspaceView, @Nullable TaskView targetTaskView) {
-        RectF iconLocation = new RectF();
-        FloatingIconView floatingIconView = getFloatingIconView(mContainer, workspaceView, null,
-                mContainer.getTaskbarInteractor() == null
-                        ? null
-                        : mContainer.getTaskbarInteractor().findMatchingAsyncView(workspaceView),
-                true /* hideOriginal */, iconLocation, false /* isOpening */);
-
-        // We want the window alpha to be 0 once this threshold is met, so that the
-        // FloatingIconView can be seen morphing into the icon shape.
-        float windowAlphaThreshold = 1f - SHAPE_PROGRESS_DURATION;
-
-        return new FloatingViewHomeAnimationFactory(floatingIconView) {
-            @Nullable
-            private RectF mTargetRect;
-
-            @Nullable
-            @Override
-            protected View getViewIgnoredInWorkspaceRevealAnimation() {
+        HomeIconAnimation icon = new HomeIconAnimation(mContainer, workspaceView);
+        return new LauncherHomeAnimationFactory() {
+            @Nullable @Override protected View getViewIgnoredInWorkspaceRevealAnimation() {
                 return workspaceView;
             }
-
-            @Override
-            public boolean isInHotseat() {
-                return workspaceView.getTag() instanceof ItemInfo
-                        && ((ItemInfo) workspaceView.getTag()).isInHotseat();
+            @Override public boolean isInHotseat() { return icon.isInHotseat(); }
+            @NonNull @Override public RectF getWindowTargetRect() { return icon.getTargetRect(); }
+            @Override public void setAnimation(RectFSpringAnim anim) { icon.setAnimation(anim); }
+            @Override public void update(RectF rect, float progress, float radius, int overlayAlpha) {
+                icon.update(rect, progress, radius, overlayAlpha);
             }
-
-            @NonNull
-            @Override
-            public RectF getWindowTargetRect() {
-                if (mTargetRect == null) {
-                    mTargetRect = new RectF(iconLocation);
-                }
-                return mTargetRect;
+            @Override protected float getWindowAlpha(float progress) {
+                return icon.getWindowAlpha(progress);
             }
-
-            @Override
-            public void setAnimation(RectFSpringAnim anim) {
-                super.setAnimation(anim);
-                mSiblingAnimation = anim;
-                mSiblingAnimation.addAnimatorListener(floatingIconView);
-                floatingIconView.setOnTargetChangeListener(
-                        mSiblingAnimation::onTargetPositionChanged);
-                floatingIconView.setFastFinishRunnable(mSiblingAnimation::end);
+            @Override protected void playScalingRevealAnimation() { icon.createReveal(false).start(); }
+            @Override public void onCancel() { icon.cancel(); }
+            @Override public boolean isAnimationReady() { return icon.isAnimationReady(); }
+            @Override public void setTaskViewArtist(ClipIconView.TaskViewArtist artist) {
+                icon.setTaskViewArtist(artist);
             }
-
-            @Override
-            public void update(
-                    RectF currentRect,
-                    float progress,
-                    float radius,
-                    int overlayAlpha) {
-                // We want the icon alpha to be 1 once this threshold is met, so that it can be
-                // seen morphing into the icon shape. But before the threshold, we want to limit
-                // the alpha to reduce the blur effect behind the window.
-                float iconAlpha = Interpolators.clampToProgress(progress, 0f, windowAlphaThreshold);
-                floatingIconView.update(iconAlpha, currentRect, progress, windowAlphaThreshold,
-                        radius, false, overlayAlpha);
-            }
-
-            @Override
-            public boolean isAnimationReady() {
-                return floatingIconView.isLaidOut();
-            }
-
-            @Override
-            public void setTaskViewArtist(ClipIconView.TaskViewArtist taskViewArtist) {
-                super.setTaskViewArtist(taskViewArtist);
-                floatingIconView.setOverlayArtist(taskViewArtist);
-            }
-
-            @Override
-            public boolean isAnimatingIntoIcon() {
-                return true;
-            }
-
-            @Nullable
-            @Override
-            public TaskView getTargetTaskView() {
-                return targetTaskView;
-            }
+            @Override public boolean isAnimatingIntoIcon() { return true; }
+            @Nullable @Override public TaskView getTargetTaskView() { return targetTaskView; }
         };
     }
 
@@ -418,8 +360,8 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
         protected void playScalingRevealAnimation() {
             if (mContainer != null) {
                 new ScalingWorkspaceRevealAnim(mContainer, mSiblingAnimation,
-                        getWindowTargetRect(), true /* playAlphaReveal */,
-                        true /* playBlur */).start();
+                        getWindowTargetRect(), false /* playAlphaReveal */,
+                        true /* playBlur */, isInHotseat(), true /* fadeInHome */).start();
             }
         }
 

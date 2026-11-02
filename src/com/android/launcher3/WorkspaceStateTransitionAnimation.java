@@ -75,6 +75,10 @@ public class WorkspaceStateTransitionAnimation {
 
     private static final float FIRST_PAGE_PINNED_WIDGET_DISABLED_ALPHA = 0.3f;
 
+    private static float sCachedHintScaleDamping = -1;
+    private static float sCachedHintScaleStiffness = -1;
+    private static float sCachedHintScaleVelocity = -1;
+
     private static final FloatProperty<Workspace<?>> WORKSPACE_SCALE_PROPERTY =
             WORKSPACE_SCALE_PROPERTY_FACTORY.get(SCALE_INDEX_WORKSPACE_STATE);
 
@@ -92,6 +96,9 @@ public class WorkspaceStateTransitionAnimation {
     }
 
     public void setState(LauncherState toState) {
+        // A completed home gesture may reapply NORMAL before its visual reveal has settled.
+        // The reveal owns these properties until its content animation finishes.
+        if (toState == NORMAL && mLauncher.isHomeRevealAnimationRunning()) return;
         setWorkspaceProperty(toState, NO_ANIM_PROPERTY_SETTER, new StateAnimationConfig());
     }
 
@@ -192,6 +199,10 @@ public class WorkspaceStateTransitionAnimation {
                 hotseatScaleAndTranslation.translationY, hotseatTranslationInterpolator);
         propertySetter.setFloat(mWorkspace.getPageIndicator(), VIEW_TRANSLATE_Y,
                 hotseatScaleAndTranslation.translationY, hotseatTranslationInterpolator);
+        propertySetter.setFloat(hotseat, VIEW_TRANSLATE_X,
+                hotseatScaleAndTranslation.translationX, hotseatTranslationInterpolator);
+        propertySetter.setFloat(mWorkspace.getPageIndicator(), VIEW_TRANSLATE_X,
+                hotseatScaleAndTranslation.translationX, hotseatTranslationInterpolator);
 
         if (centerSpringLoadedStateVertically()) {
             DropTargetBar dropTargetBar = mLauncher.getDropTargetBar();
@@ -261,18 +272,20 @@ public class WorkspaceStateTransitionAnimation {
      */
     public static <T extends View> ValueAnimator getSpringScaleAnimator(Launcher launcher, T v,
             float scale, FloatProperty<T> property) {
-        ResourceProvider rp = DynamicResource.provider(launcher);
-        float damping = rp.getFloat(R.dimen.hint_scale_damping_ratio);
-        float stiffness = rp.getFloat(R.dimen.hint_scale_stiffness);
-        float velocityPxPerS = rp.getDimension(R.dimen.hint_scale_velocity_dp_per_s);
+        if (sCachedHintScaleDamping < 0) {
+            ResourceProvider rp = DynamicResource.provider(launcher);
+            sCachedHintScaleDamping = rp.getFloat(R.dimen.hint_scale_damping_ratio);
+            sCachedHintScaleStiffness = rp.getFloat(R.dimen.hint_scale_stiffness);
+            sCachedHintScaleVelocity = rp.getDimension(R.dimen.hint_scale_velocity_dp_per_s);
+        }
 
         return new SpringAnimationBuilder(v.getContext())
-                .setStiffness(stiffness)
-                .setDampingRatio(damping)
+                .setStiffness(sCachedHintScaleStiffness)
+                .setDampingRatio(sCachedHintScaleDamping)
                 .setMinimumVisibleChange(MIN_VISIBLE_CHANGE_SCALE)
                 .setEndValue(scale)
                 .setStartValue(property.get(v))
-                .setStartVelocity(velocityPxPerS)
+                .setStartVelocity(sCachedHintScaleVelocity)
                 .build(v, property);
 
     }

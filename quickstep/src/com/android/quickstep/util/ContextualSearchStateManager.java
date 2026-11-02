@@ -84,7 +84,7 @@ public class ContextualSearchStateManager  {
 
     // Cached value whether the ContextualSearch intent filter matched any enabled components.
     private boolean mIsContextualSearchIntentAvailable;
-    private boolean mIsContextualSearchSettingEnabled;
+    private boolean mIsContextualSearchSettingEnabled = true;
 
     protected final Context mContext;
     protected final String mContextualSearchPackage;
@@ -102,12 +102,15 @@ public class ContextualSearchStateManager  {
         mContextualSearchPackageReceiver =
                 new SimpleBroadcastReceiver(context, UI_HELPER_EXECUTOR,
                         (unused) -> requestUpdateProperties());
-        mContextualSearchPackage = mContext.getResources().getString(
+        String configPkg = mContext.getResources().getString(
                 com.android.internal.R.string.config_defaultContextualSearchPackageName);
+        mContextualSearchPackage = configPkg.isEmpty()
+                ? "com.google.android.googlequicksearchbox" : configPkg;
         mSystemUiProxy = systemUiProxy;
         mTopTaskTracker = topTaskTracker;
 
-        if (!context.getPackageManager().hasSystemFeature(FEATURE_CONTEXTUAL_SEARCH)) {
+        if (!context.getPackageManager().hasSystemFeature(FEATURE_CONTEXTUAL_SEARCH)
+                && mContextualSearchPackage.isEmpty()) {
             // If we had previously registered a SystemAction which is no longer valid, we need to
             // unregister it here.
             unregisterSearchScreenSystemAction();

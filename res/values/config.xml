@@ -19,7 +19,7 @@
 
     <!-- A string pointer to the original app name string. This allows derived projects to
      easily override the app name without providing all translations -->
-    <string name="derived_app_name" translatable="false">@string/app_name</string>
+    <string name="derived_app_name" translatable="false">Penguin Launcher</string>
 
     <!-- String representing the intent to delete a package.-->
     <string name="delete_package_intent" translatable="false">#Intent;action=android.intent.action.DELETE;launchFlags=0x10800000;end</string>
@@ -28,7 +28,7 @@
     <string name="settings_fragment_name" translatable="false">com.android.launcher3.settings.SettingsActivity$LauncherSettingsFragment</string>
 
     <!-- String representing the fallback search package name.-->
-    <string name="fallback_search_package_name" translatable="false"></string>
+    <string name="fallback_search_package_name" translatable="false">com.google.android.googlequicksearchbox</string>
 
     <!-- AllApps & Launcher transitions -->
     <!-- The duration of the PagedView page snap animation -->
@@ -64,12 +64,12 @@
     <integer name="config_caretAnimationDuration">200</integer>
 
     <!-- Default packages -->
-    <string name="wallpaper_picker_package" translatable="false"></string>
+    <string name="wallpaper_picker_package" translatable="false">com.android.wallpaper</string>
 
     <!-- Scalable Grid configuration -->
     <!-- This is a float because it is converted to dp later in DeviceProfile -->
-    <dimen name="hotseat_bar_bottom_space_default">48</dimen>
-    <dimen name="hotseat_qsb_space_default">0</dimen>
+    <dimen name="hotseat_bar_bottom_space_default">36</dimen>
+    <dimen name="hotseat_qsb_space_default">24</dimen>
 
     <!-- Whether to enable background preloading of task thumbnails. -->
     <bool name="config_enableTaskSnapshotPreloading">true</bool>
@@ -83,20 +83,19 @@
     <item name="dismiss_task_trans_y_damping_ratio" type="dimen" format="float">0.73</item>
     <item name="dismiss_task_trans_y_stiffness" type="dimen" format="float">800</item>
 
-    <!-- Liquid Motion / Blaze Spring Physics: Fluid OriginOS & OneUI style feel -->
-    <item name="swipe_up_rect_scale_damping_ratio" type="dimen" format="float">0.80</item>
-    <item name="swipe_up_rect_scale_stiffness" type="dimen" format="float">180</item>
-    <item name="swipe_up_rect_scale_damping_ratio_v2" type="dimen" format="float">0.82</item>
-    <item name="swipe_up_rect_scale_stiffness_v2" type="dimen" format="float">260</item>
+    <item name="swipe_up_rect_scale_damping_ratio" type="dimen" format="float">0.75</item>
+    <item name="swipe_up_rect_scale_stiffness" type="dimen" format="float">200</item>
+    <item name="swipe_up_rect_scale_damping_ratio_v2" type="dimen" format="float">0.88</item>
+    <item name="swipe_up_rect_scale_stiffness_v2" type="dimen" format="float">600</item>
 
-    <item name="swipe_up_rect_xy_fling_friction" type="dimen" format="float">1.2</item>
+    <item name="swipe_up_rect_xy_fling_friction" type="dimen" format="float">1.5</item>
 
-    <item name="swipe_up_scale_start"  type="dimen" format="float">0.92</item>
+    <item name="swipe_up_scale_start"  type="dimen" format="float">0.88</item>
 
     <item name="swipe_up_rect_x_damping_ratio" type="dimen" format="float">0.85</item>
-    <item name="swipe_up_rect_x_stiffness" type="dimen" format="float">240</item>
-    <item name="swipe_up_rect_y_damping_ratio" type="dimen" format="float">0.82</item>
-    <item name="swipe_up_rect_y_stiffness" type="dimen" format="float">220</item>
+    <item name="swipe_up_rect_x_stiffness" type="dimen" format="float">550</item>
+    <item name="swipe_up_rect_y_damping_ratio" type="dimen" format="float">0.85</item>
+    <item name="swipe_up_rect_y_stiffness" type="dimen" format="float">550</item>
 
     <!-- Taskbar -->
     <!-- This is a float because it is converted to dp later in DeviceProfile -->
@@ -124,8 +123,8 @@
     <!-- Flag: enableScalingRevealHomeAnimation() -->
     <item name="swipe_up_min_velocity_x_px_per_s" type="dimen" format="integer">300</item>
     <item name="swipe_up_max_velocity_x_px_per_s" type="dimen" format="integer">500</item>
-    <item name="swipe_up_min_velocity_y_px_per_s" type="dimen" format="integer">2000</item>
-    <item name="swipe_up_max_velocity_y_px_per_s" type="dimen" format="integer">5000</item>
+    <item name="swipe_up_min_velocity_y_px_per_s" type="dimen" format="integer">500</item>
+    <item name="swipe_up_max_velocity_y_px_per_s" type="dimen" format="integer">2500</item>
     <item name="swipe_up_max_velocity_fall_off_factor" type="dimen" format="float">1.4</item>
 
     <array name="dynamic_resources">
@@ -225,4 +224,5 @@
     <string name="home_screen_files_file_icon_path_data" translatable="false">m 12.5,0 h 75 C 94.403542,0 100,5.5964375 100,12.5 v 75 c 0,6.903542 -5.596458,12.5 -12.5,12.5 h -75 C 5.5964375,100 0,94.403542 0,87.5 v -75 C 0,5.5964375 5.5964375,0 12.5,0 Z</string>
     <string name="home_screen_files_folder_icon_path_data" translatable="false">M10 4H4c-1.1 0,-1.99.9,-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2,-.9 2,-2V8c0,-1.1,-.9,-2,-2,-2h-8l-2,-2z</string>
     <integer name="home_screen_files_folder_icon_path_intrinsic_size">24</integer>
+
 </resources>

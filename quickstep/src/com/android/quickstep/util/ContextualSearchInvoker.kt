@@ -103,7 +103,10 @@ internal constructor(
         config: ContextualSearchConfig? = null,
     ): Boolean {
         if (invocationType == AssistUtils.INVOCATION_TYPE_HOME_BUTTON_LONG_PRESS) {
-            if (!context.packageManager.hasSystemFeature(FEATURE_CONTEXTUAL_SEARCH)) {
+            if (
+                !context.packageManager.hasSystemFeature(FEATURE_CONTEXTUAL_SEARCH) &&
+                    !contextualSearchStateManager.isContextualSearchIntentAvailable
+            ) {
                 // When Contextual Search is disabled, fall back to Assistant.
                 return false
             }
@@ -148,10 +151,7 @@ internal constructor(
      * @return true if availability checks were successful, false otherwise.
      */
     fun runContextualSearchInvocationChecksAndLogFailures(): Boolean {
-        if (
-            contextualSearchManager == null ||
-                !context.packageManager.hasSystemFeature(FEATURE_CONTEXTUAL_SEARCH)
-        ) {
+        if (contextualSearchManager == null) {
             Log.i(TAG, "Contextual Search invocation failed: no ContextualSearchManager")
             statsLogManager.logger().log(LAUNCHER_LAUNCH_ASSISTANT_FAILED_SERVICE_ERROR)
             return false
@@ -220,10 +220,30 @@ internal constructor(
         if (recentsContainerInterface?.isInLiveTileMode() == true) {
             Log.i(TAG, "Contextual Search invocation attempted: live tile")
             endLiveTileMode(recentsContainerInterface) {
-                contextualSearchManager.startContextualSearch(entryPoint, config)
+                if (
+                    context.checkSelfPermission(
+                        android.Manifest.permission.ACCESS_CONTEXTUAL_SEARCH
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    contextualSearchManager.startContextualSearch(entryPoint, config)
+                } else {
+                    contextualSearchManager.startContextualSearch(
+                        ContextualSearchConfig.Builder().setDisplayId(DEFAULT_DISPLAY).build()
+                    )
+                }
             }
         } else {
-            contextualSearchManager.startContextualSearch(entryPoint, config)
+            if (
+                context.checkSelfPermission(
+                    android.Manifest.permission.ACCESS_CONTEXTUAL_SEARCH
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                contextualSearchManager.startContextualSearch(entryPoint, config)
+            } else {
+                contextualSearchManager.startContextualSearch(
+                    ContextualSearchConfig.Builder().setDisplayId(DEFAULT_DISPLAY).build()
+                )
+            }
         }
         return true
     }

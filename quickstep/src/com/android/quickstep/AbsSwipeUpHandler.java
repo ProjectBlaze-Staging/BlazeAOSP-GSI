@@ -744,6 +744,7 @@ public abstract class AbsSwipeUpHandler<
     }
 
     private void onDeferredActivityLaunch() {
+        mInputConsumerProxy.flushPendingFinishCallback();
         mContainerInterface.switchRunningTaskViewToScreenshot(
                 null, () -> mTaskAnimationManager.finishRunningRecentsAnimation(
                         /* toHome= */ true,
@@ -2555,8 +2556,10 @@ public abstract class AbsSwipeUpHandler<
             }
 
             if (mRecentsAnimationController != null) {
-                // Update the screenshot of the task
-                if (shouldUpdate) {
+                // Update the screenshot of the task, unless we are rapidly interrupting a
+                // swipe-to-home transition where the thumbnail is unused.
+                if (shouldUpdate && !(mGestureState.getEndTarget() == HOME
+                        && mHasEndedLauncherTransition)) {
                     UI_HELPER_EXECUTOR.execute(() -> {
                         RecentsAnimationController recentsAnimationController =
                                 mRecentsAnimationController;
@@ -2607,6 +2610,9 @@ public abstract class AbsSwipeUpHandler<
     }
 
     private void finishCurrentTransitionToHome() {
+        if (mInputConsumerProxy.deferUntilTouchEnd(this::finishCurrentTransitionToHome)) {
+            return;
+        }
         if (!hasTargets() || mRecentsAnimationController == null) {
             // If there are no targets or the animation not started, then there is nothing to finish
             mStateCallback.setStateOnUiThread(STATE_CURRENT_TASK_FINISHED);
