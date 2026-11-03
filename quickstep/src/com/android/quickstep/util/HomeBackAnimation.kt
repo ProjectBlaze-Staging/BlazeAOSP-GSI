@@ -50,7 +50,11 @@ class HomeBackAnimation(
     private val dp = launcher.deviceProfile
     private val applier = SurfaceTransactionApplier(launcher.dragLayer)
     private val returningToDrawer = launcher.isInState(LauncherState.ALL_APPS)
-    private val icon = targetView?.let { HomeIconAnimation(launcher, it) }
+    private val flyToDynamicIsland =
+        DynamicIslandFlightHelper.shouldFlyToDynamicIsland(launcher, target, null)
+    private val icon =
+        if (flyToDynamicIsland) null else targetView?.let { HomeIconAnimation(launcher, it) }
+    private var swallowTriggered = false
     private var removeScrimOnNextFrame = true
     private var scrimReleased = false
     private var finished = false
@@ -63,7 +67,12 @@ class HomeBackAnimation(
         check(homeToWindow.invert(inverse))
         inverse.mapRect(it)
     }
-    private val targetRect = icon?.targetRect ?: defaultTargetRect()
+    private val targetRect =
+        if (flyToDynamicIsland) {
+            DynamicIslandFlightHelper.getDynamicIslandTargetRect(launcher, dp)
+        } else {
+            icon?.targetRect ?: defaultTargetRect()
+        }
     private val spring = HomeWindowAnimation.createSpring(
         launcher, dp, startRect, targetRect, icon?.isInHotseat == true, false,
     )
@@ -95,12 +104,24 @@ class HomeBackAnimation(
         sourceCrop, homeToWindow, params, previewCornerRadius, sourceCrop.width() / 2f,
         object : HomeWindowAnimation.Callbacks {
             override fun getWindowAlpha(progress: Float): Float = icon?.getWindowAlpha(progress)
-                ?: when {
-                    progress <= 0f -> 1f
-                    progress >= 0.85f -> 0f
-                    else -> Utilities.mapToRange(progress, 0f, 0.85f, 1f, 0f, ACCELERATE_1_5)
+                ?: if (flyToDynamicIsland) {
+                    when {
+                        progress <= 0.48f -> 1f
+                        progress >= 0.92f -> 0f
+                        else -> Utilities.mapToRange(progress, 0.48f, 0.92f, 1f, 0f, ACCELERATE_1_5)
+                    }
+                } else {
+                    when {
+                        progress <= 0f -> 1f
+                        progress >= 0.85f -> 0f
+                        else -> Utilities.mapToRange(progress, 0f, 0.85f, 1f, 0f, ACCELERATE_1_5)
+                    }
                 }
             override fun onUpdate(rect: RectF, progress: Float, visibleRadius: Float) {
+                if (flyToDynamicIsland && !swallowTriggered && progress >= 0.48f) {
+                    swallowTriggered = true
+                    DynamicIslandFlightHelper.triggerDynamicIslandSwallow(launcher)
+                }
                 icon?.update(rect, progress, visibleRadius, 0)
             }
         },
@@ -138,7 +159,14 @@ class HomeBackAnimation(
         spring.start(launcher, dp, PointF())
         if (!returningToDrawer) {
             reveal = icon?.createReveal(true) ?: ScalingWorkspaceRevealAnim(
-                launcher, null, null, false, true, false, true, true,
+                launcher,
+                if (flyToDynamicIsland) spring else null,
+                if (flyToDynamicIsland) targetRect else null,
+                flyToDynamicIsland,
+                true,
+                false,
+                true,
+                true,
             )
             reveal?.start()
         }

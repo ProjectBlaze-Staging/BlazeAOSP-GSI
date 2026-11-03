@@ -47,6 +47,7 @@ import com.android.launcher3.views.ClipIconView;
 import com.android.launcher3.views.FloatingView;
 import com.android.launcher3.widget.LauncherAppWidgetHostView;
 import com.android.quickstep.util.ActiveGestureLog;
+import com.android.quickstep.util.DynamicIslandFlightHelper;
 import com.android.quickstep.util.RectFSpringAnim;
 import com.android.quickstep.util.HomeIconAnimation;
 import com.android.quickstep.util.ScalingWorkspaceRevealAnim;
@@ -129,6 +130,19 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
 
         mContainer.getRootView().setForceHideBackArrow(true);
 
+        String closingPkg = sourceTaskView != null && sourceTaskView.getFirstTask() != null
+                && sourceTaskView.getFirstTask().key.getComponent() != null
+                ? sourceTaskView.getFirstTask().key.getComponent().getPackageName()
+                : null;
+        if (!appCanEnterPip && !mIsSwipeForSplit
+                && !DesktopVisibilityController.INSTANCE.get(mContainer)
+                        .isInDesktopModeAndNotInOverview(mContainer.getDisplayId())
+                && DynamicIslandFlightHelper.shouldFlyToDynamicIsland(
+                        mContext, runningTaskTarget, closingPkg)) {
+            mHandOffAnimationToHome = false;
+            return createDynamicIslandHomeAnimationFactory(targetTaskView);
+        }
+
         // With the app's icon on home, fly the window into it as OxygenOS does rather than handing
         // off to the shell, whose animation just shrinks the window away in the middle.
         if (!canUseWorkspaceView || appCanEnterPip || mIsSwipeForSplit) {
@@ -148,6 +162,68 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
                     isTargetTranslucent, runningTaskTarget);
         }
         return createIconHomeAnimationFactory(workspaceView, targetTaskView);
+    }
+
+    private HomeAnimationFactory createDynamicIslandHomeAnimationFactory(
+            @Nullable TaskView targetTaskView) {
+        final RectF islandRect = DynamicIslandFlightHelper.getDynamicIslandTargetRect(
+                mContext, mDp);
+        return new LauncherHomeAnimationFactory() {
+            private RectFSpringAnim mSiblingAnimation;
+            private boolean mSwallowTriggered = false;
+
+            @NonNull
+            @Override
+            public RectF getWindowTargetRect() {
+                return new RectF(islandRect);
+            }
+
+            @Override
+            public float getEndRadius(RectF cropRectF) {
+                return Math.min(cropRectF.width(), cropRectF.height()) / 2f;
+            }
+
+            @Override
+            public void setAnimation(RectFSpringAnim anim) {
+                mSiblingAnimation = anim;
+            }
+
+            @Override
+            public void update(RectF rect, float progress, float radius, int overlayAlpha) {
+                if (!mSwallowTriggered && progress >= 0.48f) {
+                    mSwallowTriggered = true;
+                    DynamicIslandFlightHelper.triggerDynamicIslandSwallow(mContext);
+                }
+            }
+
+            @Override
+            protected float getWindowAlpha(float progress) {
+                if (progress <= 0.48f) {
+                    return 1f;
+                }
+                if (progress >= 0.92f) {
+                    return 0f;
+                }
+                return 1f - mapBoundToRange(
+                        progress, 0.48f, 0.92f, 0f, 1f, Interpolators.ACCELERATE_1_5);
+            }
+
+            @Override
+            protected void playScalingRevealAnimation() {
+                if (mContainer != null) {
+                    new ScalingWorkspaceRevealAnim(
+                            mContainer, mSiblingAnimation, islandRect,
+                            true /* playAlphaReveal */, true /* playBlur */,
+                            false /* inHotseat */, true /* fadeInHome */).start();
+                }
+            }
+
+            @Nullable
+            @Override
+            public TaskView getTargetTaskView() {
+                return targetTaskView;
+            }
+        };
     }
 
     private HomeAnimationFactory createIconHomeAnimationFactory(
