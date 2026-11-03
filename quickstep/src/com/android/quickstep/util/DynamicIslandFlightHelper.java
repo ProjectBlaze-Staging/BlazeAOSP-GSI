@@ -118,8 +118,17 @@ public final class DynamicIslandFlightHelper {
 
         try {
             AudioManager am = context.getSystemService(AudioManager.class);
-            if (am != null && am.isMusicActive() && isMediaCapablePackage(context, pkg)) {
-                return true;
+            if (am != null) {
+                int mode = am.getMode();
+                if ((mode == AudioManager.MODE_IN_CALL
+                        || mode == AudioManager.MODE_IN_COMMUNICATION
+                        || mode == AudioManager.MODE_RINGTONE)
+                        && isCallCapablePackage(pkg)) {
+                    return true;
+                }
+                if (am.isMusicActive() && isMediaCapablePackage(context, pkg)) {
+                    return true;
+                }
             }
         } catch (Throwable ignored) {
         }
@@ -198,6 +207,20 @@ public final class DynamicIslandFlightHelper {
                 || state == PlaybackState.STATE_REWINDING
                 || state == PlaybackState.STATE_SKIPPING_TO_NEXT
                 || state == PlaybackState.STATE_SKIPPING_TO_PREVIOUS;
+    }
+
+    private static boolean isCallCapablePackage(String pkg) {
+        String lower = pkg.toLowerCase();
+        return lower.contains("dialer")
+                || lower.contains("incallui")
+                || lower.contains("telecom")
+                || lower.contains("phone")
+                || lower.contains("whatsapp")
+                || lower.contains("telegram")
+                || lower.contains("discord")
+                || lower.contains("skype")
+                || lower.contains("viber")
+                || lower.contains("signal");
     }
 
     private static boolean isMediaCapablePackage(Context context, String pkg) {

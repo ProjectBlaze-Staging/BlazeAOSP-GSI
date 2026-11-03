@@ -1280,6 +1280,12 @@ public abstract class AbsSwipeUpHandler<
         TaskUtils.closeSystemWindowsAsync(CLOSE_SYSTEM_WINDOWS_REASON_RECENTS);
 
         if (mRecentsView != null) {
+            try {
+                if (mRecentsView.getViewRootImpl() != null) {
+                    mRecentsView.getViewRootImpl().notifyRendererForGpuLoadUp("BlazeSwipeToHome");
+                }
+            } catch (Throwable ignored) {
+            }
             final View rv = mRecentsView;
             mRecentsView.getViewTreeObserver().addOnDrawListener(new OnDrawListener() {
                 boolean mHandled = false;

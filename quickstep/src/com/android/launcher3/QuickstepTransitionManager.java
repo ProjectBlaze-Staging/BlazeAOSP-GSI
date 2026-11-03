@@ -398,6 +398,12 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
 
     /** Give icon taps their first frame without waiting for WM's opening app surface. */
     public void beginImmediateAppLaunch(View source, ItemInfo item) {
+        try {
+            if (mDragLayer != null && mDragLayer.getViewRootImpl() != null) {
+                mDragLayer.getViewRootImpl().notifyRendererForGpuLoadUp("BlazeAppLaunch");
+            }
+        } catch (Throwable ignored) {
+        }
         if (true) {
             return;
         }
