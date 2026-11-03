@@ -213,7 +213,7 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
                 if (mContainer != null) {
                     new ScalingWorkspaceRevealAnim(
                             mContainer, mSiblingAnimation, islandRect,
-                            true /* playAlphaReveal */, true /* playBlur */,
+                            false /* playAlphaReveal */, true /* playBlur */,
                             false /* inHotseat */, true /* fadeInHome */).start();
                 }
             }

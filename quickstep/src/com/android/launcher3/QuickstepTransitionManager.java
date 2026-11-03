@@ -207,13 +207,13 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
      */
     public static final int STATUS_BAR_TRANSITION_PRE_DELAY = 96;
 
-    // Long enough for OxygenOS's launch spring to settle.
-    public static final long APP_LAUNCH_DURATION = 320;
+    // Long enough for ColorOS's calm, silky launch spring to settle.
+    public static final long APP_LAUNCH_DURATION = 460;
 
     private static final long APP_LAUNCH_ALPHA_DURATION = 100;
     private static final long APP_LAUNCH_ALPHA_START_DELAY = 20;
-    // ColorOS 17 has the window fully in place of its icon 43 ms into a launch.
-    private static final long COS_LAUNCH_ALPHA_DURATION = 43;
+    // ColorOS 17 smooth crossfade from icon into opening window.
+    private static final long COS_LAUNCH_ALPHA_DURATION = 85;
     // ColorOS 17 zooms the wallpaper in over half a second, half way at 85 ms.
     private static final long COS_LAUNCH_DEPTH_DURATION = 500;
 
@@ -240,7 +240,7 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
     // is solved.
     private static final int TASKBAR_TO_HOME_DURATION_FAST = 300;
     private static final int TASKBAR_TO_HOME_DURATION_SLOW = 1000;
-    protected static final int CONTENT_SCALE_DURATION = 320;
+    protected static final int CONTENT_SCALE_DURATION = 460;
 
     // Cross-fade duration between App Widget and App when launching from widget.
     private static final int WIDGET_CROSSFADE_DURATION_MILLIS = 125;
@@ -398,6 +398,9 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
 
     /** Give icon taps their first frame without waiting for WM's opening app surface. */
     public void beginImmediateAppLaunch(View source, ItemInfo item) {
+        if (true) {
+            return;
+        }
         if (!mCosLaunch || !(source instanceof BubbleTextView icon) || item == null
                 || item.itemType != LauncherSettings.Favorites.ITEM_TYPE_APPLICATION
                 || item.shouldUseBackgroundAnimation() || icon.getIcon() == null
@@ -654,10 +657,11 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
         // 94% at 210 ms, with its corners and the launch blur on the same curve.
         boolean cos = cosExperience(launcher);
         mCosLaunch = cos;
-        mOpeningInterpolator = new SpringInterpolator(cos ? 1900 : 400, cos ? 1.85 : 1,
+        mOpeningInterpolator = new SpringInterpolator(cos ? 280 : 400, cos ? 0.96 : 1,
                 APP_LAUNCH_DURATION);
         mOpeningRadiusInterpolator = mOpeningInterpolator;
-        mContentScaleInterpolator = new SpringInterpolator(400, 1, CONTENT_SCALE_DURATION);
+        mContentScaleInterpolator = new SpringInterpolator(cos ? 280 : 400, cos ? 0.96 : 1,
+                CONTENT_SCALE_DURATION);
         mIconAlphaInterpolator = cos ? LINEAR : new SpringInterpolator(4000, 1,
                 APP_LAUNCH_ALPHA_DURATION);
         mBlurInterpolator = cos ? mOpeningInterpolator

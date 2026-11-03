@@ -56,7 +56,6 @@ public class InputConsumerProxy {
     private boolean mDestroyed = false;
     private boolean mTouchInProgress = false;
     private boolean mDestroyPending = false;
-    private @Nullable Runnable mPendingFinishCallback;
 
     public InputConsumerProxy(Context context, Supplier<Integer> rotationSupplier,
             InputConsumerController inputConsumerController,
@@ -120,10 +119,12 @@ public class InputConsumerProxy {
             }
             initInputConsumerIfNeeded(/* isFromTouchDown= */ true);
         } else if (action == ACTION_CANCEL || action == ACTION_UP) {
-            // Finish any pending actions after delivering the final UP/CANCEL event so that
-            // destroying the recents input consumer does not synthesize ACTION_CANCEL mid-click.
+            // Finish any pending actions
             mTouchInProgress = false;
             touchTransformer.clearTouchingOrientation();
+            if (mDestroyPending) {
+                destroy();
+            }
         }
         if (mInputConsumer != null) {
             if (needTransform) {
@@ -131,35 +132,8 @@ public class InputConsumerProxy {
             }
             mInputConsumer.onMotionEvent(ev);
         }
-        if (action == ACTION_CANCEL || action == ACTION_UP) {
-            flushPendingFinishCallback();
-            if (mDestroyPending) {
-                destroy();
-            }
-        }
 
         return true;
-    }
-
-    /**
-     * Defers finishing the recents animation controller while a touch gesture is actively in
-     * progress on the input consumer, preventing InputDispatcher from synthesizing ACTION_CANCEL
-     * and dropping rapid home-screen icon clicks during app close animations.
-     */
-    public boolean deferUntilTouchEnd(Runnable callback) {
-        if (mTouchInProgress && !mDestroyed) {
-            mPendingFinishCallback = callback;
-            return true;
-        }
-        return false;
-    }
-
-    public void flushPendingFinishCallback() {
-        Runnable pending = mPendingFinishCallback;
-        mPendingFinishCallback = null;
-        if (pending != null) {
-            pending.run();
-        }
     }
 
     private void onInputConsumerHoverEvent(MotionEvent ev) {
@@ -176,7 +150,6 @@ public class InputConsumerProxy {
             mDestroyPending = true;
             return;
         }
-        flushPendingFinishCallback();
         mDestroyPending = false;
         mDestroyed = true;
         mInputConsumerController.setInputListener(null);

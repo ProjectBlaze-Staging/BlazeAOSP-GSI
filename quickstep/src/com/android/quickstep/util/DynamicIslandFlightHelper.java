@@ -67,12 +67,7 @@ public final class DynamicIslandFlightHelper {
             "com.fast4x.rimusic",
             "it.fast4x.rimusic",
             "org.lineageos.eleven",
-            "org.lineageos.twelve",
-            "com.android.chrome",
-            "com.brave.browser",
-            "org.mozilla.firefox",
-            "com.sec.android.app.sbrowser",
-            "org.lineageos.jelly"
+            "org.lineageos.twelve"
     ));
 
     private DynamicIslandFlightHelper() {}
