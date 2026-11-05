@@ -130,7 +130,7 @@ public class DateTimeActivity extends BaseSetupWizardActivity implements
         filter.addAction(Intent.ACTION_TIME_TICK);
         filter.addAction(Intent.ACTION_TIME_CHANGED);
         filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
-        registerReceiver(mIntentReceiver, filter, null, null);
+        registerReceiver(mIntentReceiver, filter, null, null, Context.RECEIVER_NOT_EXPORTED);
 
         updateTimeAndDateDisplay();
     }

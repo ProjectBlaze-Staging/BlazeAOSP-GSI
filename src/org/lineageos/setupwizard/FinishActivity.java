@@ -72,6 +72,21 @@ public class FinishActivity extends BaseSetupWizardActivity {
 
         // Ensure the main layout (not including the background view) does not get obscured by bars.
         mRootView = findViewById(R.id.root);
+        org.lineageos.setupwizard.widget.LuminousBloomView bloomView =
+                findViewById(R.id.finish_bloom_background);
+        org.lineageos.setupwizard.widget.ParticleConvergenceView particles =
+                findViewById(R.id.finish_particles);
+        View titleView = findViewById(R.id.finish_title);
+        View subtitleView = findViewById(R.id.finish_subtitle);
+        View pillsView = findViewById(R.id.finish_feature_pills);
+        if (bloomView != null) {
+            bloomView.startBloomAnimation(2000, null);
+        }
+        if (particles != null) {
+            particles.startConvergence(1600);
+        }
+        org.lineageos.setupwizard.util.OobeSpringHelper.playEntranceCascade(
+                particles, titleView, subtitleView, pillsView);
         ViewCompat.setOnApplyWindowInsetsListener(mRootView, (view, windowInsets) -> {
             final View linearLayout = findViewById(R.id.linear_layout);
             final Insets insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());

@@ -43,14 +43,10 @@ public class WelcomeActivity extends SubBaseActivity {
                 .setOnClickListener(
                         view -> startSubactivity(new Intent(ACTION_ACCESSIBILITY_SETTINGS)));
 
-        FooterButtonStyleUtils.applyPrimaryButtonPartnerResource(this, startButton, true);
-
         if (SetupWizardUtils.hasTelephony(this)) {
             setSkipText(R.string.emergency_call);
             emergButton.setOnClickListener(
                     view -> startSubactivity(new Intent(ACTION_EMERGENCY_DIAL)));
-
-            FooterButtonStyleUtils.applySecondaryButtonPartnerResource(this, emergButton, true);
         } else {
             emergButton.setVisibility(View.GONE);
         }
@@ -69,10 +65,46 @@ public class WelcomeActivity extends SubBaseActivity {
                 SetupWizardUtils.finishSetupWizard(WelcomeActivity.this);
             });
         }
+
+        // Initialize and choreograph ColorOS 17 opening animation suite
+        org.lineageos.setupwizard.widget.LuminousBloomView bloomView = findViewById(R.id.bloom_background);
+        org.lineageos.setupwizard.widget.PeekingMascotView mascotView = findViewById(R.id.peeking_mascot);
+        org.lineageos.setupwizard.widget.TouchRippleLayout touchLayout = findViewById(R.id.touch_ripple_layout);
+        org.lineageos.setupwizard.widget.TypewriterTextView typewriter = findViewById(R.id.typewriter_text);
+        org.lineageos.setupwizard.widget.ParticleConvergenceView particles = findViewById(R.id.particle_convergence);
+        View accessibilityButton = findViewById(R.id.launch_accessibility);
+
+        org.lineageos.setupwizard.util.OobeSpringHelper.attachTouchSpring(startButton, 0.94f);
+        org.lineageos.setupwizard.util.OobeSpringHelper.attachTouchSpring(emergButton, 0.95f);
+        org.lineageos.setupwizard.util.OobeSpringHelper.attachTouchSpring(accessibilityButton, 0.95f);
+        org.lineageos.setupwizard.util.OobeSpringHelper.attachTouchSpring(skipButton, 0.95f);
+        org.lineageos.setupwizard.util.OobeSpringHelper.playEntranceCascade(
+                typewriter, particles, startButton, emergButton, accessibilityButton);
+
+        if (touchLayout != null && mascotView != null) {
+            touchLayout.setMascotView(mascotView);
+        }
+
+        if (bloomView != null) {
+            bloomView.startBloomAnimation(2600, () -> {
+                if (typewriter != null) {
+                    typewriter.startTyping(() -> {
+                        if (particles != null) {
+                            particles.startConvergence(1800);
+                        }
+                    });
+                }
+            });
+        }
     }
 
     @Override
     public void onBackPressed() {
+    }
+
+    @Override
+    protected com.google.android.setupdesign.GlifLayout getGlifLayout() {
+        return null;
     }
 
     @Override

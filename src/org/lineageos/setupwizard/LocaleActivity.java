@@ -92,7 +92,8 @@ public class LocaleActivity extends BaseSetupWizardActivity {
         super.onResume();
         mPaused = false;
         registerReceiver(mSimChangedReceiver,
-                new IntentFilter(TelephonyIntents.ACTION_SIM_STATE_CHANGED));
+                new IntentFilter(TelephonyIntents.ACTION_SIM_STATE_CHANGED),
+                Context.RECEIVER_EXPORTED);
         if (mLanguagePicker != null) {
             mLanguagePicker.setEnabled(true);
         }

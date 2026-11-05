@@ -172,6 +172,12 @@ public class WizardManager extends Activity {
     }
 
     private static boolean isIntentAvailable(Context context, Intent intent) {
+        if (intent == null) return false;
+        if (intent.getPackage() == null && intent.getComponent() == null) {
+            if (intent.getAction() != null && intent.getAction().startsWith("org.lineageos.setupwizard")) {
+                intent.setPackage(context.getPackageName());
+            }
+        }
         return !context.getPackageManager().queryIntentActivities(intent,
                 PackageManager.MATCH_DEFAULT_ONLY).isEmpty();
     }

@@ -2,6 +2,7 @@
 <!--
      SPDX-FileCopyrightText: 2016 The CyanogenMod Project
      SPDX-FileCopyrightText: The LineageOS Project
+     SPDX-FileCopyrightText: 2026 The BlazeAOSP Project
      SPDX-License-Identifier: Apache-2.0
 -->
 <android.widget.FrameLayout
@@ -14,30 +15,126 @@
     android:fitsSystemWindows="true"
     app:insetForeground="@android:color/transparent">
 
+    <!-- ColorOS 17 Living Flow 3D Ribbon Backdrop -->
+    <org.lineageos.setupwizard.widget.LuminousBloomView
+        android:id="@+id/finish_bloom_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <ImageView
         android:id="@+id/background"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/background"
-        android:visibility="visible"/>
+        android:visibility="gone" />
 
     <LinearLayout
         android:id="@+id/linear_layout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
+        android:gravity="center_horizontal"
         style="@style/SudContentFrame">
 
+        <!-- Compatibility logo view -->
         <ImageView
             android:id="@+id/brand_logo"
-            android:layout_width="match_parent"
-            android:layout_height="0px"
-            android:layout_weight="1"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
             android:src="@drawable/logo"
-            android:adjustViewBounds="true"
-            android:scaleType="fitCenter"
+            android:visibility="gone" />
+
+        <!-- Center Area: Particle Convergence + "17" Living Flow Core + Finale Typography -->
+        <LinearLayout
+            android:id="@+id/finish_hero_container"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
             android:gravity="center"
-            android:padding="@dimen/content_margin_left"/>
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp">
+
+            <org.lineageos.setupwizard.widget.ParticleConvergenceView
+                android:id="@+id/finish_particles"
+                android:layout_width="match_parent"
+                android:layout_height="230dp" />
+
+            <TextView
+                android:id="@+id/finish_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Her Şey Hazır."
+                android:textColor="#FFFFFF"
+                android:textSize="32sp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="bold"
+                android:layout_marginTop="8dp" />
+
+            <TextView
+                android:id="@+id/finish_subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="BlazeAOSP 17 • İpeksi Akıcılık ve Living Flow deneyimine hoş geldiniz."
+                android:textColor="#D8E6F8"
+                android:textSize="15sp"
+                android:gravity="center"
+                android:layout_marginTop="8dp" />
+
+            <!-- Feature Summary Pills -->
+            <LinearLayout
+                android:id="@+id/finish_feature_pills"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginTop="18dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/btn_pill_secondary"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:text="120Hz Laminar Flow"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp" />
+
+                <Space
+                    android:layout_width="8dp"
+                    android:layout_height="1dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/btn_pill_secondary"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:text="Liquid Glass"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp" />
+
+                <Space
+                    android:layout_width="8dp"
+                    android:layout_height="1dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/btn_pill_secondary"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:text="Dinamik Ada"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11.5sp" />
+            </LinearLayout>
+
+        </LinearLayout>
 
         <org.lineageos.setupwizard.NavigationLayout
             android:id="@+id/navigation_bar"

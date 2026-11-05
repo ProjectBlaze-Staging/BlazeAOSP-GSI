@@ -55,6 +55,13 @@ public class WizardAction implements Parcelable {
         try {
             intent = Intent.parseUri(mUri, URI_INTENT_SCHEME);
             intent.addFlags(FLAG_GRANT_READ_URI_PERMISSION);
+            if (intent.getPackage() == null && intent.getComponent() == null) {
+                if (intent.getAction() != null && (intent.getAction().startsWith("org.lineageos.setupwizard")
+                        || intent.getAction().equals("com.android.wizard.LOAD")
+                        || intent.getAction().equals("com.android.wizard.NEXT"))) {
+                    intent.setPackage("org.lineageos.setupwizard");
+                }
+            }
         } catch (URISyntaxException e) {
             Log.e(TAG, "Bad URI: " + mUri);
         }

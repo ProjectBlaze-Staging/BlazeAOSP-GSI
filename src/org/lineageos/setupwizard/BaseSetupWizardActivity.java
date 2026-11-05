@@ -65,6 +65,15 @@ public abstract class BaseSetupWizardActivity extends AppCompatActivity implemen
         mNavigationBar = getNavigationBar();
         if (mNavigationBar != null) {
             mNavigationBar.setNavigationBarListener(this);
+            org.lineageos.setupwizard.util.OobeSpringHelper.attachTouchSpring(
+                    mNavigationBar.getNextButton(), 0.94f);
+            org.lineageos.setupwizard.util.OobeSpringHelper.attachTouchSpring(
+                    mNavigationBar.getSkipButton(), 0.95f);
+        }
+        final View pageView = findViewById(R.id.page);
+        if (pageView != null) {
+            org.lineageos.setupwizard.util.OobeSpringHelper.playEntranceCascade(
+                    pageView, mNavigationBar);
         }
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override

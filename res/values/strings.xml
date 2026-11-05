@@ -6,7 +6,7 @@
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_name">Setup Wizard</string>
-    <string name="os_name" translatable="false">LineageOS</string>
+    <string name="os_name" translatable="false">BlazeAOSP</string>
 
     <string name="lineage_wizard_script_uri" translatable="false">android.resource://org.lineageos.setupwizard/raw/lineage_wizard_script</string>
     <string name="lineage_wizard_script_user_uri" translatable="false">android.resource://org.lineageos.setupwizard/raw/lineage_wizard_script_user</string>
@@ -53,14 +53,14 @@
     <string name="location_agps_access_summary">When location is on, <b>download satellite assistance data from the internet</b>, which can greatly improve the GPS startup performance.</string>
 
     <!-- Recovery update page -->
-    <string name="update_recovery_title">Update Lineage Recovery</string>
-    <string name="update_recovery_description">Updates Lineage Recovery on first boot subsequent to every update.</string>
+    <string name="update_recovery_title">Update Blaze Recovery</string>
+    <string name="update_recovery_description">Updates Blaze Recovery on first boot subsequent to every update.</string>
     <string name="update_recovery_warning">Recovery will be updated as soon as you finish the setup. If you wish to keep it intact, disable this feature.</string>
-    <string name="update_recovery_setting">Update Lineage Recovery alongside the OS</string>
+    <string name="update_recovery_setting">Update Blaze Recovery alongside the OS</string>
     <string name="update_recovery_full_description"><xliff:g id="recovery_update_description">%1$s</xliff:g>\n<xliff:g id="recovery_update_warning">%2$s</xliff:g></string>
 
     <!-- LineageOS features page -->
-    <string name="setup_services">LineageOS features</string>
+    <string name="setup_services">BlazeAOSP features</string>
     <string name="services_pp_explanation">These services work for you to extend the capabilities of your device. Data will be used in accordance with <xliff:g id="name" example="LineageOS">%1$s</xliff:g>\'s privacy policy.</string>
     <string name="services_find_privacy_policy">You can read the privacy policy on another device by visiting <xliff:g id="uri" example="https://lineageos.org/legal">%1$s</xliff:g></string>
     <string name="services_privacy_policy_uri" translatable="false">https://lineageos.org/legal</string>

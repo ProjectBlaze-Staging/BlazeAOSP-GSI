@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
      SPDX-FileCopyrightText: The LineageOS Project
+     SPDX-FileCopyrightText: 2026 The BlazeAOSP Project
      SPDX-License-Identifier: Apache-2.0
 -->
 <com.google.android.setupdesign.GlifLayout
@@ -14,7 +15,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         style="@style/SudContentFrame"
-        android:layout_marginTop="@dimen/base_margin_top">
+        android:layout_marginTop="8dp">
 
         <FrameLayout
             android:id="@+id/page"
@@ -25,24 +26,291 @@
             <ScrollView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:fillViewport="true">
+                android:fillViewport="true"
+                android:scrollbars="none">
 
-                <RadioGroup
-                    android:id="@+id/theme_radio_group"
+                <LinearLayout
+                    android:id="@+id/oobe_studio_container"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingBottom="18dp">
 
-                    <RadioButton
-                        android:id="@+id/radio_dark"
-                        android:text="@string/dark"
-                        style="@style/SudRadioButton" />
+                    <!-- 1. Live 120Hz Interactive Preview Stage -->
+                    <org.lineageos.setupwizard.widget.OobeLivePreviewView
+                        android:id="@+id/oobe_live_preview"
+                        android:layout_width="match_parent"
+                        android:layout_height="168dp"
+                        android:layout_marginBottom="14dp" />
 
-                    <RadioButton
-                        android:id="@+id/radio_light"
-                        android:text="@string/light"
-                        style="@style/SudRadioButton" />
+                    <!-- 2. Section: Sistem Görünümü (Karanlık / Aydınlık) -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="SİSTEM TEMA MODU"
+                        android:textSize="11sp"
+                        android:letterSpacing="0.08"
+                        android:textStyle="bold"
+                        android:textColor="?android:attr/colorAccent"
+                        android:layout_marginBottom="8dp" />
 
-                </RadioGroup>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:baselineAligned="false"
+                        android:layout_marginBottom="14dp">
+
+                        <LinearLayout
+                            android:id="@+id/card_theme_dark"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:padding="14dp"
+                            android:layout_marginEnd="6dp"
+                            android:clickable="true"
+                            android:focusable="true">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Karanlık Mod"
+                                android:textSize="15sp"
+                                android:textStyle="bold"
+                                android:textColor="?android:attr/textColorPrimary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Cosmos Indigo &amp; OLED"
+                                android:textSize="12sp"
+                                android:textColor="?android:attr/textColorSecondary"
+                                android:layout_marginTop="2dp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/card_theme_light"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:padding="14dp"
+                            android:layout_marginStart="6dp"
+                            android:clickable="true"
+                            android:focusable="true">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Aydınlık Mod"
+                                android:textSize="15sp"
+                                android:textStyle="bold"
+                                android:textColor="?android:attr/textColorPrimary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Pearl Dawn &amp; Kristal"
+                                android:textSize="12sp"
+                                android:textColor="?android:attr/textColorSecondary"
+                                android:layout_marginTop="2dp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Hidden legacy RadioGroup for 100% compatibility -->
+                    <RadioGroup
+                        android:id="@+id/theme_radio_group"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone">
+
+                        <RadioButton
+                            android:id="@+id/radio_dark"
+                            android:text="@string/dark"
+                            style="@style/SudRadioButton" />
+
+                        <RadioButton
+                            android:id="@+id/radio_light"
+                            android:text="@string/light"
+                            style="@style/SudRadioButton" />
+                    </RadioGroup>
+
+                    <!-- 3. Section: Liquid Glass & Arayüz Yüzey Stili -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="LIQUID GLASS &amp; ARAYÜZ MİMARİSİ"
+                        android:textSize="11sp"
+                        android:letterSpacing="0.08"
+                        android:textStyle="bold"
+                        android:textColor="?android:attr/colorAccent"
+                        android:layout_marginBottom="8dp" />
+
+                    <LinearLayout
+                        android:id="@+id/card_glass_ios27"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="13dp"
+                        android:layout_marginBottom="8dp"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="iOS 27 Koyu Füme Kristal + Mercek Kapsülü"
+                            android:textSize="14.5sp"
+                            android:textStyle="bold"
+                            android:textColor="?android:attr/textColorPrimary" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Koyu füme cam yüzey, parlak prizmatik kenar ve aktif sekme merceği"
+                            android:textSize="12sp"
+                            android:textColor="?android:attr/textColorSecondary"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/card_glass_hybrid"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="13dp"
+                        android:layout_marginBottom="8dp"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="ColorOS 17 Living Flow + iOS Liquid Glass"
+                            android:textSize="14.5sp"
+                            android:textStyle="bold"
+                            android:textColor="?android:attr/textColorPrimary" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Yüzen Bento kart düzeni ve kırınımlı kristal cam efektleri"
+                            android:textSize="12sp"
+                            android:textColor="?android:attr/textColorSecondary"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/card_glass_frosted"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="13dp"
+                        android:layout_marginBottom="14dp"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="One UI 9 Yumuşak Buzlu Cam (Dengeli)"
+                            android:textSize="14.5sp"
+                            android:textStyle="bold"
+                            android:textColor="?android:attr/textColorPrimary" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Yumuşak saten bulanıklık ve yüksek okunabilirlik odaklı yüzeyler"
+                            android:textSize="12sp"
+                            android:textColor="?android:attr/textColorSecondary"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <!-- 4. Section: Dinamik Ada & Laminar Flow Deneyimi -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="DİNAMİK ADA &amp; HAREKET MOTORU"
+                        android:textSize="11sp"
+                        android:letterSpacing="0.08"
+                        android:textStyle="bold"
+                        android:textColor="?android:attr/colorAccent"
+                        android:layout_marginBottom="8dp" />
+
+                    <LinearLayout
+                        android:id="@+id/card_toggle_island_messages"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="13dp"
+                        android:layout_marginBottom="8dp"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Dinamik Ada Canlı Mesaj &amp; Zamanlayıcılar"
+                                android:textSize="14sp"
+                                android:textStyle="bold"
+                                android:textColor="?android:attr/textColorPrimary" />
+
+                            <TextView
+                                android:id="@+id/summary_island_messages"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Aktif • Gelen mesajlar ve sayaçlar Dinamik Ada'da açılır"
+                                android:textSize="12sp"
+                                android:textColor="?android:attr/textColorSecondary"
+                                android:layout_marginTop="2dp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/card_toggle_floating_tabs"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="13dp"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Yüzen Liquid Glass Alt Sekme Barı &amp; 120Hz Yay Fiziği"
+                                android:textSize="14sp"
+                                android:textStyle="bold"
+                                android:textColor="?android:attr/textColorPrimary" />
+
+                            <TextView
+                                android:id="@+id/summary_floating_tabs"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Aktif • Laminar Flow 120Hz dokunsal yay tepkimesi"
+                                android:textSize="12sp"
+                                android:textColor="?android:attr/textColorSecondary"
+                                android:layout_marginTop="2dp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                </LinearLayout>
             </ScrollView>
         </FrameLayout>
 

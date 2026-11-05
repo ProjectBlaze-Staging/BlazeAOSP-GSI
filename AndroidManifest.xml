@@ -106,7 +106,7 @@
             android:label="@string/activity_label_empty"
             android:configChanges="mcc|mnc"
             android:immersive="true"
-            android:exported="false"
+            android:exported="true"
             android:windowSoftInputMode="stateAlwaysHidden">
             <intent-filter>
                 <action android:name="org.lineageos.setupwizard.LINEAGE_WELCOME" />
