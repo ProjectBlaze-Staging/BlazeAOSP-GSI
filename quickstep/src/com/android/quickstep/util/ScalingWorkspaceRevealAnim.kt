@@ -101,9 +101,16 @@ constructor(
         // moment the finger lifts, measured from its SurfaceFlinger layers: its blur is 93% left
         // at 25 ms, half at 100 ms and a fifth at 175 ms. Home's zoom and fade follow it.
         private const val COS_SPRING_RAD_PER_S = 18f
+        private const val COS_BLUR_SPRING_RAD_PER_S = 23f
         @JvmField
         val COS_BLUR_INTERPOLATOR = Interpolator { progress ->
             val wt = COS_SPRING_RAD_PER_S * SCALE_DURATION_MS / 1000f
+            val end = 1 - (1 + wt) * exp(-wt)
+            val t = wt * progress
+            (1 - (1 + t) * exp(-t)) / end
+        }
+        val COS_FAST_UNBLUR_INTERPOLATOR = Interpolator { progress ->
+            val wt = COS_BLUR_SPRING_RAD_PER_S * SCALE_DURATION_MS / 1000f
             val end = 1 - (1 + wt) * exp(-wt)
             val t = wt * progress
             (1 - (1 + t) * exp(-t)) / end
@@ -222,7 +229,7 @@ constructor(
             depthController = (launcher as? QuickstepLauncher)?.depthController
             transitionConfig.setInterpolator(
                 StateAnimationConfig.ANIM_DEPTH,
-                if (cos) COS_BLUR_INTERPOLATOR else SCALE_INTERPOLATOR,
+                if (cos) COS_FAST_UNBLUR_INTERPOLATOR else SCALE_INTERPOLATOR,
             )
             if (!cos) {
                 depthController?.pauseBlursOnWindows(true)
@@ -258,7 +265,7 @@ constructor(
             // Add a blur animation to the scrim layer.
             val maxBlurRadius =
                 launcher.resources.getDimensionPixelSize(R.dimen.max_depth_blur_radius_enhanced)
-            val blurInterpolator = if (cos) COS_BLUR_INTERPOLATOR else BLUR_INTERPOLATOR
+            val blurInterpolator = if (cos) COS_FAST_UNBLUR_INTERPOLATOR else BLUR_INTERPOLATOR
             val blurAnimator = ValueAnimator.ofFloat(1f, 0f)
             blurAnimator.interpolator = blurInterpolator
             blurAnimator.addUpdateListener {
@@ -388,16 +395,16 @@ constructor(
         } ?: content
         if (cos) {
             result.addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationStart(animation: Animator) {
-                    Animations.setOngoingAnimation(launcher.workspace, result)
-                    Animations.setOngoingAnimation(launcher.hotseat, result)
-                }
                 override fun onAnimationCancel(animation: Animator) {
                     cancelled = true
                 }
                 override fun onAnimationEnd(animation: Animator) {
-                    Animations.setOngoingAnimation(launcher.workspace, animation = null)
-                    Animations.setOngoingAnimation(launcher.hotseat, animation = null)
+                    if (launcher.workspace.getTag(com.android.app.animation.R.id.ongoing_animation) === result) {
+                        launcher.workspace.setTag(com.android.app.animation.R.id.ongoing_animation, null)
+                    }
+                    if (launcher.hotseat.getTag(com.android.app.animation.R.id.ongoing_animation) === result) {
+                        launcher.hotseat.setTag(com.android.app.animation.R.id.ongoing_animation, null)
+                    }
                     if (cancelled) {
                         WORKSPACE_SCALE_PROPERTY_FACTORY[SCALE_INDEX_WORKSPACE_STATE].set(
                             launcher.workspace,
@@ -466,7 +473,9 @@ constructor(
     private fun settleDepthIfIdle(depthController: LauncherDepthController) {
         launcher.dragLayer.post {
             val stateManager = launcher.stateManager
-            if (launcher.hasBeenResumed() &&
+            val hasNewWorkspaceAnim =
+                launcher.workspace.getTag(com.android.app.animation.R.id.ongoing_animation) != null
+            if (!hasNewWorkspaceAnim &&
                 stateManager.isInStableState(LauncherState.NORMAL) && !stateManager.isInTransition) {
                 depthController.stateDepth.value = LauncherState.NORMAL.getDepth(launcher)
                 depthController.resetWallpaperDepth()

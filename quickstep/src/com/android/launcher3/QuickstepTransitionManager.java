@@ -1104,12 +1104,23 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                 // TODO(b/367591368): ideally these animations would be refactored to be
                 //  controlled centrally so each instances doesn't need to care about this
                 //  coordination.
-                float[] scale = new float[]{view.getScaleX(), scales[1]};
+                float currentScale = view.getScaleX();
 
                 // Cancel any ongoing animations. This is necessary to avoid a conflict between
                 // e.g. the unfinished animation triggered when closing an app back to Home and
                 // this animation caused by a launch.
                 Animations.Companion.cancelOngoingAnimation(view);
+                if (view == mLauncher.getWorkspace()) {
+                    LauncherAnimUtils.WORKSPACE_SCALE_PROPERTY_FACTORY
+                            .get(LauncherAnimUtils.SCALE_INDEX_WORKSPACE_STATE)
+                            .set(mLauncher.getWorkspace(), 1f);
+                } else if (view == mLauncher.getHotseat()) {
+                    LauncherAnimUtils.HOTSEAT_SCALE_PROPERTY_FACTORY
+                            .get(LauncherAnimUtils.SCALE_INDEX_WORKSPACE_STATE)
+                            .set(mLauncher.getHotseat(), 1f);
+                }
+                SCALE_PROPERTY.set(view, currentScale);
+                float[] scale = new float[]{currentScale, scales[1]};
                 // Make sure to cache the current animation, so it can be properly interrupted.
                 Animations.Companion.setOngoingAnimation(view, launcherAnimator);
 
@@ -1124,8 +1135,11 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                     SCALE_PROPERTY.set(view, 1f);
                     view.setLayerType(View.LAYER_TYPE_NONE, null);
 
-                    // Reset the cached animation.
-                    Animations.Companion.setOngoingAnimation(view, null /* animation */);
+                    // Reset the cached animation only if it still belongs to this launcherAnimator.
+                    if (view.getTag(com.android.app.animation.R.id.ongoing_animation)
+                            == launcherAnimator) {
+                        view.setTag(com.android.app.animation.R.id.ongoing_animation, null);
+                    }
                 });
                 mLauncher.resumeExpensiveViewUpdates();
             };
