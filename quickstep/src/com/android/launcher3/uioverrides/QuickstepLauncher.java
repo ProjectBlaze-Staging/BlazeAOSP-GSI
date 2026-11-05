@@ -473,7 +473,7 @@ public class QuickstepLauncher extends Launcher implements RecentsViewContainer,
         // An app tapped while the last one still flies home launches right away: finish that
         // transition to home first, then launch, while the flight carries on (ColorOS behaviour).
         RunnableList deferred = new RunnableList();
-        if (com.android.quickstep.AbsSwipeUpHandler.finishHomeFlightForLaunch(() -> {
+        if (com.android.quickstep.AbsSwipeUpHandler.finishHomeFlightForLaunch(v, () -> {
             RunnableList actual = startActivitySafely(v, intent, item);
             if (actual != null) {
                 actual.add(deferred::executeAllAndDestroy);

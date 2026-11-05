@@ -641,6 +641,17 @@ public class FloatingIconView extends FrameLayout implements
             boolean hideOriginal, RectF positionOut, boolean isOpening) {
         final DragLayer dragLayer = launcher.getDragLayer();
         ViewGroup parent = (ViewGroup) dragLayer.getParent();
+        // Ensure no previous FloatingIconView (e.g. from a parallel closing animation) is still
+        // bound to the same originalView when a rapid re-launch or close starts.
+        if (originalView != null && parent != null) {
+            for (int i = parent.getChildCount() - 1; i >= 0; i--) {
+                View child = parent.getChildAt(i);
+                if (child instanceof FloatingIconView existing
+                        && existing.mOriginalIcon == originalView) {
+                    existing.fastFinish();
+                }
+            }
+        }
         FloatingIconView view = launcher.getViewCache().getView(R.layout.floating_icon_view,
                 launcher, parent);
         view.recycle();

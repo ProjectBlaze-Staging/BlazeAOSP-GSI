@@ -157,6 +157,7 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
         }
         // This handler plays the window's flight home itself, so the shell must not as well.
         mHandOffAnimationToHome = false;
+        mTargetWorkspaceView = workspaceView;
         if (workspaceView instanceof LauncherAppWidgetHostView) {
             return createWidgetHomeAnimationFactory((LauncherAppWidgetHostView) workspaceView,
                     isTargetTranslucent, runningTaskTarget);

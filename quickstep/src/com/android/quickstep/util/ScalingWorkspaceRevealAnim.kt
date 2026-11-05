@@ -388,13 +388,27 @@ constructor(
         } ?: content
         if (cos) {
             result.addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationStart(animation: Animator) {
+                    Animations.setOngoingAnimation(launcher.workspace, result)
+                    Animations.setOngoingAnimation(launcher.hotseat, result)
+                }
                 override fun onAnimationCancel(animation: Animator) {
                     cancelled = true
                 }
                 override fun onAnimationEnd(animation: Animator) {
                     Animations.setOngoingAnimation(launcher.workspace, animation = null)
                     Animations.setOngoingAnimation(launcher.hotseat, animation = null)
-                    if (cancelled) settleDepthIfIdle(launcher.depthController)
+                    if (cancelled) {
+                        WORKSPACE_SCALE_PROPERTY_FACTORY[SCALE_INDEX_WORKSPACE_STATE].set(
+                            launcher.workspace,
+                            1f,
+                        )
+                        HOTSEAT_SCALE_PROPERTY_FACTORY[SCALE_INDEX_WORKSPACE_STATE].set(
+                            launcher.hotseat,
+                            1f,
+                        )
+                        settleDepthIfIdle(launcher.depthController)
+                    }
                 }
             })
         }

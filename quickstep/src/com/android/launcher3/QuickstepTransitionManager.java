@@ -1991,8 +1991,9 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
         for (RemoteAnimationTarget target : targets) {
             if (target.mode == MODE_CLOSING) {
                 numTargets++;
-                if (numTargets > 1 || target.windowConfiguration.getWindowingMode()
-                        == WINDOWING_MODE_MULTI_WINDOW) {
+                if (target.windowConfiguration.getWindowingMode()
+                        == WINDOWING_MODE_MULTI_WINDOW
+                        || (!mCosLaunch && numTargets > 1)) {
                     return true;
                 }
             }

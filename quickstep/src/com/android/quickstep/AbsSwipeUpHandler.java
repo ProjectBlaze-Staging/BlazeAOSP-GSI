@@ -355,6 +355,8 @@ public abstract class AbsSwipeUpHandler<
     // Set when WM finished the recents transition early (an app was launched from home while the
     // window was still flying home); the flight then finishes without the window.
     private boolean mHomeAnimDetachedFromWindow;
+    // The workspace icon/widget view targeted by the current home animation, if any.
+    @Nullable protected View mTargetWorkspaceView;
     // The handler whose window is currently flying home, if any.
     private static WeakReference<AbsSwipeUpHandler> sHomeFlight = new WeakReference<>(null);
     // Possible second animation running at the same time as mRunningWindowAnim
@@ -1167,29 +1169,56 @@ public abstract class AbsSwipeUpHandler<
      */
     @UiThread
     public static boolean finishHomeFlightForLaunch(@NonNull Runnable launch) {
+        return finishHomeFlightForLaunch(null, launch);
+    }
+
+    @UiThread
+    public static boolean finishHomeFlightForLaunch(
+            @Nullable View launchingView, @NonNull Runnable launch) {
         AbsSwipeUpHandler handler = sHomeFlight.get();
-        return handler != null && handler.finishHomeFlightEarly(launch);
+        return handler != null && handler.finishHomeFlightEarly(launchingView, launch);
     }
 
     private boolean isParallelHomeFlightEnabled() {
         return QuickstepTransitionManager.cosExperience(mContext);
     }
 
-    private boolean finishHomeFlightEarly(@NonNull Runnable launch) {
+    private boolean finishHomeFlightEarly(
+            @Nullable View launchingView, @NonNull Runnable launch) {
         if (!isParallelHomeFlightEnabled() || mRecentsAnimationController == null || mGestureState.getEndTarget() != HOME
                 || mStateCallback.hasStates(STATE_CURRENT_TASK_FINISHED)
                 || mStateCallback.hasStates(STATE_HANDLER_INVALIDATED)) {
             return false;
         }
+        sHomeFlight.clear();
         RectFSpringAnim flight = mCatchableWindowAnim;
-        detachHomeAnimationFromWindow();
-        if (!mHomeAnimDetachedFromWindow) {
-            return false;
+        boolean sameTargetRelaunch =
+                launchingView != null && launchingView == mTargetWorkspaceView;
+        if (sameTargetRelaunch) {
+            // Re-launching the exact same icon that is currently flying home: finish its
+            // closing FloatingIconView cleanly right now so it never collides with the new
+            // opening FloatingIconView or stalls the UI thread with a synchronous screenshot.
+            mCatchableWindowAnim = null;
+            endRunningWindowAnim(false /* cancel */);
+        } else {
+            detachHomeAnimationFromWindow();
+            if (!mHomeAnimDetachedFromWindow) {
+                return false;
+            }
+            // Finishing hides the window at once; if the flying window is still large, fly a
+            // stand-in frame into the other icon while the newly tapped icon launches.
+            if (flight != null && flight.isRunning()
+                    && (mDp == null
+                            || flight.getCurrentRect().width()
+                                    > mDp.getDeviceProperties().getWidthPx() * 0.36f)) {
+                flyStandIn(flight);
+            }
         }
-        // Finishing hides the window at once, so its last frame flies on in its place.
-        flyStandIn(flight);
         mStateCallback.runOnceAtState(STATE_CURRENT_TASK_FINISHED, launch);
-        // Settle on home now; the detached flight carries on to the icon on its own.
+        // Mark screenshot captured immediately so switchToScreenshot() does not wait for an
+        // async UI_HELPER_EXECUTOR IPC round-trip on the app-launch critical path.
+        mStateCallback.setStateOnUiThread(STATE_SCREENSHOT_CAPTURED);
+        // Settle on home now; any detached flight carries on to its icon on its own.
         mGestureState.setState(STATE_RECENTS_SCROLLING_FINISHED);
         mGestureState.setState(STATE_END_TARGET_ANIMATION_FINISHED);
         return true;
@@ -1398,12 +1427,20 @@ public abstract class AbsSwipeUpHandler<
 
     private boolean canCatchWindow(MotionEvent ev) {
         RectFSpringAnim anim = mCatchableWindowAnim;
-        return anim != null
-                && anim.isRunning()
-                && mRecentsAnimationController != null
-                && mGestureState.getEndTarget() == HOME
-                && getOrientationHandler() == RecentsPagedOrientationHandler.PORTRAIT
-                && anim.getCurrentRect().contains(ev.getX(), ev.getY());
+        if (anim == null
+                || !anim.isRunning()
+                || mRecentsAnimationController == null
+                || mGestureState.getEndTarget() != HOME
+                || getOrientationHandler() != RecentsPagedOrientationHandler.PORTRAIT
+                || !anim.getCurrentRect().contains(ev.getX(), ev.getY())) {
+            return false;
+        }
+        if (isParallelHomeFlightEnabled() && mDp != null) {
+            // Once the closing window has shrunk near its target icon, deliver taps immediately
+            // to Launcher on ACTION_DOWN instead of holding them in mPendingDown until ACTION_UP.
+            return anim.getCurrentRect().width() > mDp.getDeviceProperties().getWidthPx() * 0.42f;
+        }
+        return true;
     }
 
     /**
