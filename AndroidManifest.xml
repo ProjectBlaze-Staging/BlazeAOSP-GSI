@@ -42,6 +42,11 @@
                 <action android:name="android.media.action.DISPLAY_AUDIO_EFFECT_CONTROL_PANEL"/>
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
+            <intent-filter>
+                <action android:name="com.dolby.LAUNCH_DS_APP"/>
+                <action android:name="org.lineageos.audiofx.DOLBY_ATMOS"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
         </activity>
         <activity
                 android:name=".activity.ControlPanelPicker"
