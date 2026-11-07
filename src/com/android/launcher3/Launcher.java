@@ -1791,9 +1791,11 @@ public class Launcher extends StatefulActivity<LauncherState>
         int left = inOutPosition[0];
         int top = inOutPosition[1];
         DeviceProfile deviceProfile = getDeviceProfile();
+        boolean popupFolder = android.provider.Settings.Secure.getInt(
+                getContentResolver(), "blaze_homeup_popup_folder", 0) == 1;
         int distFromEdgeOfScreen = getWorkspace().getPaddingLeft();
         final int availableWidth = deviceProfile.getDeviceProperties().getAvailableWidthPx();
-        if (deviceProfile.getDeviceProperties().isPhone()
+        if (!popupFolder && deviceProfile.getDeviceProperties().isPhone()
                 && (availableWidth - width) < 4 * distFromEdgeOfScreen) {
             // Center the folder if it is very close to being centered anyway, by virtue of
             // filling the majority of the viewport. ie. remove it from the uncanny valley

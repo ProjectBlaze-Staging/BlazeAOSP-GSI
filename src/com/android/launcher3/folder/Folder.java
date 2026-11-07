@@ -1313,8 +1313,25 @@ public class Folder extends AbstractFloatingView implements ClipPathView, DragSo
         parent.getDescendantRectRelativeToSelf(mFolderIcon, sTempRect);
         int centerX = sTempRect.centerX();
         int centerY = sTempRect.centerY();
+        int iconTop = sTempRect.top;
+        int iconBottom = sTempRect.bottom;
+        boolean popupFolder = android.provider.Settings.Secure.getInt(
+                getContext().getContentResolver(), "blaze_homeup_popup_folder", 0) == 1;
         int centeredLeft = centerX - width / 2;
-        int centeredTop = centerY - height / 2;
+        int centeredTop;
+        if (popupFolder) {
+            int gap = Math.round(10 * getResources().getDisplayMetrics().density);
+            Rect bounds = mActivityContext.getFolderBoundingBox();
+            if (iconTop - gap - height >= bounds.top) {
+                centeredTop = iconTop - gap - height;
+            } else if (iconBottom + gap + height <= bounds.bottom) {
+                centeredTop = iconBottom + gap;
+            } else {
+                centeredTop = centerY - height / 2;
+            }
+        } else {
+            centeredTop = centerY - height / 2;
+        }
 
         sTempRect.set(mActivityContext.getFolderBoundingBox());
         int left = Utilities.boundToRange(centeredLeft, sTempRect.left, sTempRect.right - width);

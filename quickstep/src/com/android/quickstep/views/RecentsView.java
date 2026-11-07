@@ -208,6 +208,7 @@ import com.android.quickstep.util.FontUtils;
 import com.android.quickstep.util.GroupTask;
 import com.android.quickstep.util.LayoutUtils;
 import com.android.quickstep.util.RecentsOrientedState;
+import com.android.quickstep.util.RectFSpringAnim.BlazeHomeUpController;
 import com.android.quickstep.util.SingleTask;
 import com.android.quickstep.util.SplitTask;
 import com.android.quickstep.util.SurfaceTransaction;
@@ -2389,6 +2390,43 @@ public abstract class RecentsView<
 
         // Clear all button alpha was set by the previous line.
         mActionsView.getIndexScrollAlpha().updateValue(1 - mClearAllButton.getScrollAlpha());
+
+        int style = BlazeHomeUpController.getTaskChangerStyle(getContext());
+        boolean applyCustomStyle = !showAsGrid() && getWidth() > 0;
+        float activeFraction = Utilities.boundToRange(1f - mFullscreenProgress, 0f, 1f);
+        float screenCenter = scroll + getWidth() / 2f;
+        int childCount = getChildCount();
+        for (int i = 0; i < childCount; i++) {
+            View child = getChildAt(i);
+            if (!(child instanceof TaskView taskView)) continue;
+            if (!applyCustomStyle || style == BlazeHomeUpController.TASK_STYLE_DEFAULT
+                    || activeFraction <= 0f) {
+                taskView.setTaskChangerScale(1f);
+                taskView.setTaskChangerTranslationX(0f);
+                taskView.setTranslationZ(0f);
+                continue;
+            }
+            float childCenter = (taskView.getLeft() + taskView.getRight()) / 2f;
+            float d = (childCenter - screenCenter) / Math.max(1f, (float) getWidth());
+            float absD = Math.min(1.5f, Math.abs(d));
+            if (style == BlazeHomeUpController.TASK_STYLE_STACK) {
+                float targetScale = 1f - 0.14f * absD;
+                float scale = Utilities.mapRange(activeFraction, 1f, targetScale);
+                float overlapShift = -d * taskView.getMeasuredWidth() * 0.28f * activeFraction;
+                float z = (1.5f - absD) * 12f * activeFraction;
+                taskView.setTaskChangerScale(scale);
+                taskView.setTaskChangerTranslationX(overlapShift);
+                taskView.setTranslationZ(z);
+            } else if (style == BlazeHomeUpController.TASK_STYLE_SLIM) {
+                float targetScale = 0.84f - 0.08f * absD;
+                float scale = Utilities.mapRange(activeFraction, 1f, targetScale);
+                float pullShift = -d * taskView.getMeasuredWidth() * 0.18f * activeFraction;
+                float z = (1.5f - absD) * 4f * activeFraction;
+                taskView.setTaskChangerScale(scale);
+                taskView.setTaskChangerTranslationX(pullShift);
+                taskView.setTranslationZ(z);
+            }
+        }
     }
 
     @Override
@@ -2780,6 +2818,12 @@ public abstract class RecentsView<
                     taskViewSimulator.taskGridTranslationY.value =
                             runningTaskView.getGridTranslationY();
                 });
+            }
+            if (BlazeHomeUpController.shouldFocusPreviousTaskInRecents(getContext())) {
+                int runningIdx = getRunningTaskIndex();
+                if (runningIdx >= 0 && runningIdx + 1 < getTaskViewCount()) {
+                    snapToPage(runningIdx + 1);
+                }
             }
         } else {
             setCurrentTask(-1);

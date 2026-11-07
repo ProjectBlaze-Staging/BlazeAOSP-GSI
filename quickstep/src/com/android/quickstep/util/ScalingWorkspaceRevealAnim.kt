@@ -43,6 +43,7 @@ import com.android.launcher3.LauncherState
 import com.android.launcher3.QuickstepTransitionManager
 import com.android.launcher3.R
 import com.android.launcher3.anim.AnimatorListeners
+import com.android.quickstep.util.RectFSpringAnim.BlazeHomeUpController
 import com.android.launcher3.anim.PendingAnimation
 import com.android.launcher3.anim.PropertySetter
 import com.android.launcher3.statehandlers.LauncherDepthController
@@ -120,7 +121,9 @@ constructor(
     }
 
     private val cos = QuickstepTransitionManager.cosExperience(launcher)
-    private val duration = if (cos) COS_SCALE_DURATION_MS else SCALE_DURATION_MS
+    private val homeUp = BlazeHomeUpController.resolvePhysics(launcher)
+    private val duration = homeUp.homeDurationMs
+    private val effectivePlayBlur = playBlur && homeUp.wallpaperBlur
     private val animation = PendingAnimation(duration)
     private var blurLayer: SurfaceControl? = null
     private var wallpaperZoomAnimation: Animator? = null
@@ -151,7 +154,7 @@ constructor(
             LauncherState.BACKGROUND_APP,
             setupConfig,
         )
-        if (playBlur && !cos) {
+        if (effectivePlayBlur && !cos) {
             addBlurLayer()
         }
 
@@ -159,7 +162,7 @@ constructor(
             if (workspace.scaleX != MAX_SIZE) {
                 workspace.scaleX
             } else {
-                MIN_SIZE
+                homeUp.homeScale
             }
 
         // Scale the Workspace and Hotseat around the same pivot.
@@ -224,7 +227,7 @@ constructor(
         transitionConfig.duration = duration
 
         var depthController: LauncherDepthController? = null
-        if (playBlur) {
+        if (effectivePlayBlur) {
             // Match the Wallpaper depth to the rest of the content.
             depthController = (launcher as? QuickstepLauncher)?.depthController
             transitionConfig.setInterpolator(
@@ -245,7 +248,7 @@ constructor(
                     wallpaperZoomAnimation = depthController?.animateWallpaperDepth(
                         LauncherState.BACKGROUND_APP.getDepth(launcher),
                         LauncherState.NORMAL.getDepth(launcher),
-                        900L,
+                        homeUp.wallpaperDurationMs,
                         Interpolator { progress ->
                             val wt = 7f * 0.9f
                             val end = 1 - (1 + wt) * exp(-wt)

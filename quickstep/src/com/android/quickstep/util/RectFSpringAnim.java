@@ -19,11 +19,13 @@ package com.android.quickstep.util;
 import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 import android.animation.Animator;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.SystemClock;
+import android.provider.Settings;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
@@ -360,8 +362,8 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
                                         .setStiffness(mRectStiffness)
                                         .setDampingRatio(dampingZ))
                         .setStartVelocity(scaleVelocity)
-                        // ColorOS lets the size spring pass its target for the landing bounce.
-                        .setMaxValue(mCos ? 1.25f : 1f)
+                        // Allow the size spring to pass its target for landing bounce when underdamped.
+                        .setMaxValue((mCos || dampingZ < 0.99f) ? 1.28f : 1f)
                         .setMinimumVisibleChange(minVisibleChange)
                         .addEndListener((animation, canceled, value, velocity) -> {
                             if (mPaused) return;
@@ -573,6 +575,16 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
                 cos = true;
             }
 
+            BlazeHomeUpController.GesturePhysics hp =
+                    BlazeHomeUpController.resolvePhysics(context);
+            stiffnessX = hp.stiffnessX;
+            stiffnessY = hp.stiffnessY;
+            dampingX = hp.dampingX;
+            dampingY = hp.dampingY;
+            rectStiffness = hp.scaleStiffness;
+            rectDamping = hp.scaleDamping;
+            tracking = hp.tracking;
+
             this.startRect = startRect;
             this.targetRect = targetRect;
         }
@@ -635,6 +647,233 @@ public class RectFSpringAnim extends SurfaceReleaseCheck {
                 RectF start, RectF target) {
             super(context, deviceProfile, start, target);
             tracking = TRACKING_CENTER;
+        }
+    }
+
+    /**
+     * Reads and resolves Good Lock / Home Up (v17) gesture physics, app open curves,
+     * folder popup, workspace grid/icon scale, and Task Changer parameters from Settings.Secure.
+     *
+     * All default presets and simple tuning formulas match Samsung Home Up 17.0.00.54
+     * (TuningDataKt.java, SimpleTuningLogic.java, GestureAdvancedTuningActivity.java).
+     */
+    public static final class BlazeHomeUpController {
+
+        public static final String KEY_GESTURE_MODE = "blaze_homeup_gesture_mode";
+        public static final String KEY_SIMPLE_PROGRESS = "blaze_homeup_simple_progress";
+
+        public static final String KEY_DAMPING_X = "blaze_homeup_damping_x";
+        public static final String KEY_DAMPING_Y = "blaze_homeup_damping_y";
+        public static final String KEY_STIFFNESS_X = "blaze_homeup_stiffness_x";
+        public static final String KEY_STIFFNESS_Y = "blaze_homeup_stiffness_y";
+        public static final String KEY_SCALE_DAMPING = "blaze_homeup_scale_damping";
+        public static final String KEY_SCALE_STIFFNESS = "blaze_homeup_scale_stiffness";
+        public static final String KEY_TRACKING_MODE = "blaze_homeup_tracking_mode";
+
+        public static final String KEY_APP_OPEN_DURATION = "blaze_homeup_app_open_duration";
+        public static final String KEY_HOME_DURATION = "blaze_homeup_home_duration";
+        public static final String KEY_HOME_SCALE = "blaze_homeup_home_scale";
+        public static final String KEY_WALLPAPER_DURATION = "blaze_homeup_wallpaper_duration";
+        public static final String KEY_WALLPAPER_BLUR = "blaze_homeup_wallpaper_blur";
+
+        public static final String KEY_POPUP_FOLDER = "blaze_homeup_popup_folder";
+        public static final String KEY_FOLDER_GRID = "blaze_homeup_folder_grid";
+        public static final String KEY_ICON_SCALE_PCT = "blaze_homeup_icon_scale_pct";
+        public static final String KEY_GRID_NAME = "blaze_homeup_grid_name";
+
+        public static final String KEY_TASK_CHANGER_STYLE = "blaze_homeup_task_changer_style";
+        public static final String KEY_RECENTS_FOCUS_PREV = "blaze_homeup_recents_focus_prev";
+
+        public static final int MODE_DYNAMIC = 0;
+        public static final int MODE_CLASSIC = 1;
+        public static final int MODE_PLAYFUL = 2;
+        public static final int MODE_SWEET = 3;
+        public static final int MODE_SIMPLE = 4;
+        public static final int MODE_ADVANCED = 5;
+
+        public static final int TASK_STYLE_DEFAULT = 0;
+        public static final int TASK_STYLE_STACK = 1;
+        public static final int TASK_STYLE_SLIM = 2;
+
+        private BlazeHomeUpController() {}
+
+        public static final class GesturePhysics {
+            public float dampingX;
+            public float dampingY;
+            public float stiffnessX;
+            public float stiffnessY;
+            public float scaleDamping;
+            public float scaleStiffness;
+            public int tracking;
+            public long appOpenDurationMs;
+            public long homeDurationMs;
+            public float homeScale;
+            public long wallpaperDurationMs;
+            public boolean wallpaperBlur;
+        }
+
+        public static GesturePhysics resolvePhysics(Context context) {
+            GesturePhysics p = new GesturePhysics();
+            if (context == null) {
+                applyPreset0Dynamic(p);
+                return p;
+            }
+            ContentResolver r = context.getContentResolver();
+            int mode = Settings.Secure.getInt(r, KEY_GESTURE_MODE, MODE_DYNAMIC);
+            p.wallpaperBlur = Settings.Secure.getInt(r, KEY_WALLPAPER_BLUR, 1) == 1;
+
+            switch (mode) {
+                case MODE_CLASSIC:
+                    applyPreset1Classic(p);
+                    break;
+                case MODE_PLAYFUL:
+                    applyPreset2Playful(p);
+                    break;
+                case MODE_SWEET:
+                    applyPreset3Sweet(p);
+                    break;
+                case MODE_SIMPLE: {
+                    int progress = Utilities.boundToRange(
+                            Settings.Secure.getInt(r, KEY_SIMPLE_PROGRESS, 50), 0, 100);
+                    applySimpleSliderFormula(p, progress);
+                    break;
+                }
+                case MODE_ADVANCED: {
+                    p.dampingX = Utilities.boundToRange(
+                            Settings.Secure.getFloat(r, KEY_DAMPING_X, 0.82f), 0.50f, 1.00f);
+                    p.dampingY = Utilities.boundToRange(
+                            Settings.Secure.getFloat(r, KEY_DAMPING_Y, 0.82f), 0.50f, 1.00f);
+                    p.stiffnessX = Utilities.boundToRange(
+                            Settings.Secure.getFloat(r, KEY_STIFFNESS_X, 240f), 50f, 900f);
+                    p.stiffnessY = Utilities.boundToRange(
+                            Settings.Secure.getFloat(r, KEY_STIFFNESS_Y, 240f), 50f, 900f);
+                    p.scaleDamping = Utilities.boundToRange(
+                            Settings.Secure.getFloat(r, KEY_SCALE_DAMPING, 0.86f), 0.50f, 1.00f);
+                    p.scaleStiffness = Utilities.boundToRange(
+                            Settings.Secure.getFloat(r, KEY_SCALE_STIFFNESS, 300f), 50f, 900f);
+                    p.tracking = Utilities.boundToRange(
+                            Settings.Secure.getInt(r, KEY_TRACKING_MODE, TRACKING_CENTER),
+                            TRACKING_TOP, TRACKING_BOTTOM);
+                    p.appOpenDurationMs = Utilities.boundToRange(
+                            Settings.Secure.getInt(r, KEY_APP_OPEN_DURATION, 450), 180, 1200);
+                    p.homeDurationMs = Utilities.boundToRange(
+                            Settings.Secure.getInt(r, KEY_HOME_DURATION, 480), 180, 1800);
+                    p.homeScale = Utilities.boundToRange(
+                            Settings.Secure.getFloat(r, KEY_HOME_SCALE, 0.88f), 0.65f, 0.98f);
+                    p.wallpaperDurationMs = Utilities.boundToRange(
+                            Settings.Secure.getInt(r, KEY_WALLPAPER_DURATION, 850), 200, 2000);
+                    break;
+                }
+                case MODE_DYNAMIC:
+                default:
+                    applyPreset0Dynamic(p);
+                    break;
+            }
+            return p;
+        }
+
+        private static void applyPreset0Dynamic(GesturePhysics p) {
+            p.dampingX = 0.80f;
+            p.dampingY = 0.80f;
+            p.stiffnessX = 300.0f;
+            p.stiffnessY = 300.0f;
+            p.scaleDamping = 0.75f;
+            p.scaleStiffness = 350.0f;
+            p.tracking = TRACKING_BOTTOM;
+            p.appOpenDurationMs = 380L;
+            p.homeDurationMs = 350L;
+            p.homeScale = 0.90f;
+            p.wallpaperDurationMs = 450L;
+        }
+
+        private static void applyPreset1Classic(GesturePhysics p) {
+            p.dampingX = 1.00f;
+            p.dampingY = 1.00f;
+            p.stiffnessX = 150.0f;
+            p.stiffnessY = 150.0f;
+            p.scaleDamping = 1.00f;
+            p.scaleStiffness = 150.0f;
+            p.tracking = TRACKING_TOP;
+            p.appOpenDurationMs = 500L;
+            p.homeDurationMs = 700L;
+            p.homeScale = 0.82f;
+            p.wallpaperDurationMs = 1100L;
+        }
+
+        private static void applyPreset2Playful(GesturePhysics p) {
+            p.dampingX = 0.66f;
+            p.dampingY = 0.66f;
+            p.stiffnessX = 330.0f;
+            p.stiffnessY = 330.0f;
+            p.scaleDamping = 0.68f;
+            p.scaleStiffness = 650.0f;
+            p.tracking = TRACKING_CENTER;
+            p.appOpenDurationMs = 420L;
+            p.homeDurationMs = 320L;
+            p.homeScale = 0.76f;
+            p.wallpaperDurationMs = 620L;
+        }
+
+        private static void applyPreset3Sweet(GesturePhysics p) {
+            p.dampingX = 0.96f;
+            p.dampingY = 0.96f;
+            p.stiffnessX = 65.0f;
+            p.stiffnessY = 65.0f;
+            p.scaleDamping = 0.98f;
+            p.scaleStiffness = 110.0f;
+            p.tracking = TRACKING_CENTER;
+            p.appOpenDurationMs = 680L;
+            p.homeDurationMs = 1050L;
+            p.homeScale = 0.85f;
+            p.wallpaperDurationMs = 1500L;
+        }
+
+        public static void applySimpleSliderFormula(GesturePhysics p, int progress) {
+            int clamped = Utilities.boundToRange(progress, 0, 100);
+            int inv = 100 - clamped;
+            p.dampingX = (inv * 0.0021f) + 0.78f;
+            p.dampingY = (inv * 0.0021f) + 0.78f;
+            p.stiffnessX = (clamped * 5.5f) + 50.0f;
+            p.stiffnessY = (clamped * 5.5f) + 50.0f;
+            p.scaleDamping = (inv * 0.0019f) + 0.80f;
+            p.scaleStiffness = (clamped * 6.0f) + 100.0f;
+            p.tracking = TRACKING_CENTER;
+            p.wallpaperDurationMs = 1300L - (clamped * 10L);
+            p.homeDurationMs = 700L - (clamped * 4L);
+            p.homeScale = 0.84f + (clamped * 0.001f);
+            p.appOpenDurationMs = 650L - (clamped * 3L);
+        }
+
+        public static boolean isPopupFolderEnabled(Context context) {
+            if (context == null) return false;
+            return Settings.Secure.getInt(context.getContentResolver(), KEY_POPUP_FOLDER, 0) == 1;
+        }
+
+        public static int getFolderGridMode(Context context) {
+            if (context == null) return 0;
+            return Utilities.boundToRange(
+                    Settings.Secure.getInt(context.getContentResolver(), KEY_FOLDER_GRID, 0), 0, 3);
+        }
+
+        public static float getIconScaleMultiplier(Context context) {
+            if (context == null) return 1.0f;
+            int pct = Utilities.boundToRange(
+                    Settings.Secure.getInt(context.getContentResolver(), KEY_ICON_SCALE_PCT, 100),
+                    80, 120);
+            return pct / 100.0f;
+        }
+
+        public static int getTaskChangerStyle(Context context) {
+            if (context == null) return TASK_STYLE_DEFAULT;
+            return Utilities.boundToRange(
+                    Settings.Secure.getInt(context.getContentResolver(), KEY_TASK_CHANGER_STYLE,
+                            TASK_STYLE_DEFAULT),
+                    TASK_STYLE_DEFAULT, TASK_STYLE_SLIM);
+        }
+
+        public static boolean shouldFocusPreviousTaskInRecents(Context context) {
+            if (context == null) return false;
+            return Settings.Secure.getInt(context.getContentResolver(), KEY_RECENTS_FOCUS_PREV, 0) == 1;
         }
     }
 

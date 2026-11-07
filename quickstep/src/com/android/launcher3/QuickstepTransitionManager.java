@@ -163,6 +163,7 @@ import com.android.quickstep.util.BackAnimState;
 import com.android.quickstep.util.CrossDisplayMoveTransition;
 import com.android.quickstep.util.MultiValueUpdateListener;
 import com.android.quickstep.util.RectFSpringAnim;
+import com.android.quickstep.util.RectFSpringAnim.BlazeHomeUpController;
 import com.android.quickstep.util.RectFSpringAnim.DefaultSpringConfig;
 import com.android.quickstep.util.RectFSpringAnim.WidgetSpringConfig;
 import com.android.quickstep.util.ScalingWorkspaceRevealAnim;
@@ -680,6 +681,15 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                 com.android.internal.R.bool.config_enableAppLaunchBlur);
     }
 
+    private long getDynamicAppLaunchDuration() {
+        return BlazeHomeUpController.resolvePhysics(mLauncher).appOpenDurationMs;
+    }
+
+    private Interpolator getDynamicOpeningInterpolator() {
+        BlazeHomeUpController.GesturePhysics hp = BlazeHomeUpController.resolvePhysics(mLauncher);
+        return new SpringInterpolator(hp.scaleStiffness, hp.scaleDamping, hp.appOpenDurationMs);
+    }
+
     @Override
     public void onDeviceProfileChanged(DeviceProfile dp) {
         cancelImmediateAppLaunch();
@@ -776,7 +786,7 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
         // recents launch or not for sure until we know the opening app targets.
         long duration = fromRecents
                 ? RECENTS_LAUNCH_DURATION
-                : APP_LAUNCH_DURATION;
+                : getDynamicAppLaunchDuration();
 
         long statusBarTransitionDelay = duration - STATUS_BAR_TRANSITION_DURATION
                 - STATUS_BAR_TRANSITION_PRE_DELAY;
@@ -1125,8 +1135,8 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                 Animations.Companion.setOngoingAnimation(view, launcherAnimator);
 
                 ObjectAnimator scaleAnim = ObjectAnimator.ofFloat(view, SCALE_PROPERTY, scale)
-                        .setDuration(CONTENT_SCALE_DURATION);
-                scaleAnim.setInterpolator(mContentScaleInterpolator);
+                        .setDuration(getDynamicAppLaunchDuration());
+                scaleAnim.setInterpolator(getDynamicOpeningInterpolator());
                 launcherAnimator.play(scaleAnim);
             });
 
@@ -1253,9 +1263,14 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
         final SurfaceControl scrimLayer = addScrimLayer(surfaceApplier, openingSurfaces);
         final float scrimAlpha = getScrimAlpha();
 
+        final long dynamicLaunchDuration = getDynamicAppLaunchDuration();
+        final Interpolator dynamicOpeningInterpolator = getDynamicOpeningInterpolator();
+        final boolean homeUpBlurEnabled = mIsAppLaunchBlurEnabled
+                && BlazeHomeUpController.resolvePhysics(mLauncher).wallpaperBlur;
+
         AnimatorSet animatorSet = new AnimatorSet();
         ValueAnimator appAnimator = ValueAnimator.ofFloat(0, 1);
-        appAnimator.setDuration(APP_LAUNCH_DURATION);
+        appAnimator.setDuration(dynamicLaunchDuration);
         appAnimator.setInterpolator(LINEAR);
         appAnimator.addListener(floatingView);
         appAnimator.addListener(new AnimatorListenerAdapter() {
@@ -1295,7 +1310,7 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
                 : 0f;
         final float finalShadowRadius = appTargetsAreTranslucent ? 0 : mMaxShadowRadius;
 
-        MultiValueUpdateListener listener = new MultiValueUpdateListener(mOpeningInterpolator) {
+        MultiValueUpdateListener listener = new MultiValueUpdateListener(dynamicOpeningInterpolator) {
             FloatProp mDx = new FloatProp(0, prop.dX);
             FloatProp mDy = new FloatProp(0, prop.dY);
 
@@ -1305,15 +1320,15 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
             FloatProp mIconAlpha = new FloatProp(prop.iconAlphaStart, 0f,
                     mCosLaunch
                             ? clampToDuration(mIconAlphaInterpolator, 0,
-                                    COS_LAUNCH_ALPHA_DURATION, APP_LAUNCH_DURATION)
+                                    COS_LAUNCH_ALPHA_DURATION, dynamicLaunchDuration)
                             : clampToDuration(mIconAlphaInterpolator, APP_LAUNCH_ALPHA_START_DELAY,
-                                    APP_LAUNCH_ALPHA_DURATION, APP_LAUNCH_DURATION));
+                                    APP_LAUNCH_ALPHA_DURATION, dynamicLaunchDuration));
 
             FloatProp mWindowRadius =
                     new FloatProp(initialWindowRadius, getWindowCornerRadius(mLauncher),
-                            mOpeningRadiusInterpolator);
+                            dynamicOpeningInterpolator);
             FloatProp mShadowRadius =
-                    new FloatProp(0, finalShadowRadius, mOpeningRadiusInterpolator);
+                    new FloatProp(0, finalShadowRadius, dynamicOpeningInterpolator);
 
             FloatProp mCropRectCenterX = new FloatProp(prop.cropCenterXStart, prop.cropCenterXEnd);
             FloatProp mCropRectCenterY = new FloatProp(prop.cropCenterYStart, prop.cropCenterYEnd);
@@ -1322,22 +1337,27 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
 
             FloatProp mNavFadeOut = new FloatProp(1f, 0f, clampToDuration(
                     NAV_FADE_OUT_INTERPOLATOR, 0, ANIMATION_NAV_FADE_OUT_DURATION,
-                    APP_LAUNCH_DURATION));
+                    dynamicLaunchDuration));
             FloatProp mNavFadeIn = new FloatProp(0f, 1f, clampToDuration(
-                    NAV_FADE_IN_INTERPOLATOR, ANIMATION_DELAY_NAV_FADE_IN,
-                    ANIMATION_NAV_FADE_IN_DURATION, APP_LAUNCH_DURATION));
+                    NAV_FADE_IN_INTERPOLATOR,
+                    Math.max(0L, dynamicLaunchDuration - ANIMATION_NAV_FADE_IN_DURATION),
+                    ANIMATION_NAV_FADE_IN_DURATION, dynamicLaunchDuration));
 
             // Blur fades in/out over the first 75% of the animation so the GPU is free
             // during the heaviest crop-rect phase at the end. This prevents jank when
             // app-launch blur is enabled in Launcher settings.
-            FloatProp mBlurRadius = new FloatProp(0f, mMaxBlurRadius, mCosLaunch
-                    ? mBlurInterpolator
-                    : clampToDuration(mBlurInterpolator, 0, (long) (APP_LAUNCH_DURATION * 0.75f),
-                            APP_LAUNCH_DURATION));
-            FloatProp mBlurScrimAlpha = new FloatProp(0f, scrimAlpha, mCosLaunch
-                    ? mBlurInterpolator
-                    : clampToDuration(mBlurInterpolator, 0, (long) (APP_LAUNCH_DURATION * 0.75f),
-                            APP_LAUNCH_DURATION));
+            FloatProp mBlurRadius = new FloatProp(0f, homeUpBlurEnabled ? mMaxBlurRadius : 0f,
+                    mCosLaunch
+                            ? dynamicOpeningInterpolator
+                            : clampToDuration(mBlurInterpolator, 0,
+                                    (long) (dynamicLaunchDuration * 0.75f),
+                                    dynamicLaunchDuration));
+            FloatProp mBlurScrimAlpha = new FloatProp(0f, homeUpBlurEnabled ? scrimAlpha : 0f,
+                    mCosLaunch
+                            ? dynamicOpeningInterpolator
+                            : clampToDuration(mBlurInterpolator, 0,
+                                    (long) (dynamicLaunchDuration * 0.75f),
+                                    dynamicLaunchDuration));
 
             @Override
             public void onUpdate(float percent, boolean initOnly) {

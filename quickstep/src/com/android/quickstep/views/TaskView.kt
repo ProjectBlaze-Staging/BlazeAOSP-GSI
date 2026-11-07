@@ -396,6 +396,13 @@ constructor(
             applyScale()
         }
 
+    var taskChangerScale = 1f
+        set(value) {
+            if (field == value) return
+            field = value
+            applyScale()
+        }
+
     private var dismissTranslationX = 0f
         set(value) {
             field = value
@@ -490,6 +497,13 @@ constructor(
         set(value) {
             field = value
             applyTranslationY()
+        }
+
+    var taskChangerTranslationX = 0f
+        set(value) {
+            if (field == value) return
+            field = value
+            applyTranslationX()
         }
 
     private val taskViewAlpha = MultiValueAlpha(this, Alpha.entries.size)
@@ -1777,6 +1791,7 @@ constructor(
             persistentScale *
                 dismissScale *
                 animateToIconScale *
+                taskChangerScale *
                 Utilities.mapRange(modalness, 1f, modalScale)
         scaleX = scale
         scaleY = scale
@@ -1791,7 +1806,8 @@ constructor(
                 splitSelectTranslationX +
                 gridEndTranslationX +
                 persistentTranslationX +
-                animateToIconTranslationX
+                animateToIconTranslationX +
+                taskChangerTranslationX
     }
 
     private fun applyTranslationY() {
@@ -1885,6 +1901,8 @@ constructor(
         animateToIconScale = 1f
         animateToIconTranslationX = 0f
         animateToIconTranslationY = 0f
+        taskChangerScale = 1f
+        taskChangerTranslationX = 0f
     }
 
     private fun getGridTrans(endTranslation: Float) =

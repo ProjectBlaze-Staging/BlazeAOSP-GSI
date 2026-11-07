@@ -310,6 +310,45 @@ public class InvariantDeviceProfile {
                 mMainExecutor, i -> onConfigChanged());
         localeReceiver.register(actionsFilter(Intent.ACTION_LOCALE_CHANGED));
         lifeCycle.addCloseable(localeReceiver);
+
+        android.database.ContentObserver homeUpObserver = new android.database.ContentObserver(
+                new android.os.Handler(android.os.Looper.getMainLooper())) {
+            @Override
+            public void onChange(boolean selfChange, @Nullable android.net.Uri uri) {
+                if (uri == null) return;
+                String key = uri.getLastPathSegment();
+                if ("blaze_homeup_grid_name".equals(key)) {
+                    String targetGrid = android.provider.Settings.Secure.getString(
+                            context.getContentResolver(), "blaze_homeup_grid_name");
+                    if (!TextUtils.isEmpty(targetGrid)) {
+                        setCurrentGrid(targetGrid);
+                    }
+                } else if ("blaze_homeup_icon_scale_pct".equals(key)
+                        || "blaze_homeup_folder_grid".equals(key)
+                        || "blaze_homeup_hide_labels".equals(key)) {
+                    if ("blaze_homeup_hide_labels".equals(key)) {
+                        boolean hide = android.provider.Settings.Secure.getInt(
+                                context.getContentResolver(), "blaze_homeup_hide_labels", 0) == 1;
+                        mPrefs.put(WORKSPACE_ITEMS_LABEL_HIDDEN, hide);
+                    }
+                    onConfigChanged();
+                }
+            }
+        };
+        android.content.ContentResolver cr = context.getContentResolver();
+        cr.registerContentObserver(
+                android.provider.Settings.Secure.getUriFor("blaze_homeup_grid_name"),
+                false, homeUpObserver);
+        cr.registerContentObserver(
+                android.provider.Settings.Secure.getUriFor("blaze_homeup_icon_scale_pct"),
+                false, homeUpObserver);
+        cr.registerContentObserver(
+                android.provider.Settings.Secure.getUriFor("blaze_homeup_folder_grid"),
+                false, homeUpObserver);
+        cr.registerContentObserver(
+                android.provider.Settings.Secure.getUriFor("blaze_homeup_hide_labels"),
+                false, homeUpObserver);
+        lifeCycle.addCloseable(() -> cr.unregisterContentObserver(homeUpObserver));
     }
 
     private void initGrid(String gridName) {
@@ -385,8 +424,21 @@ public class InvariantDeviceProfile {
         gridType = closestProfile.gridType;
         defaultLayoutId = closestProfile.defaultLayoutId;
 
-        numFolderRows = closestProfile.numFolderRows;
-        numFolderColumns = closestProfile.numFolderColumns;
+        numFolderRows = closestProfile.numFolderRows.clone();
+        numFolderColumns = closestProfile.numFolderColumns.clone();
+        int folderGridMode = Utilities.boundToRange(
+                android.provider.Settings.Secure.getInt(
+                        context.getContentResolver(), "blaze_homeup_folder_grid", 0), 0, 3);
+        if (folderGridMode == 1) {
+            Arrays.fill(numFolderColumns, 3);
+            Arrays.fill(numFolderRows, 3);
+        } else if (folderGridMode == 2) {
+            Arrays.fill(numFolderColumns, 4);
+            Arrays.fill(numFolderRows, 4);
+        } else if (folderGridMode == 3) {
+            Arrays.fill(numFolderColumns, 4);
+            Arrays.fill(numFolderRows, 5);
+        }
         folderStyle = closestProfile.folderStyle;
 
         cellStyle = closestProfile.cellStyle;
@@ -413,7 +465,16 @@ public class InvariantDeviceProfile {
 
         inlineNavButtonsEndSpacing = closestProfile.inlineNavButtonsEndSpacing;
 
-        iconSize = displayOption.iconSizes;
+        float iconScaleMult = Utilities.boundToRange(
+                android.provider.Settings.Secure.getInt(
+                        context.getContentResolver(), "blaze_homeup_icon_scale_pct", 100),
+                80, 115) / 100f;
+        iconSize = displayOption.iconSizes.clone();
+        if (iconScaleMult != 1.0f) {
+            for (int i = 0; i < iconSize.length; i++) {
+                iconSize[i] = iconSize[i] * iconScaleMult;
+            }
+        }
         float maxIconSize = iconSize[0];
         for (int i = 1; i < iconSize.length; i++) {
             maxIconSize = Math.max(maxIconSize, iconSize[i]);
@@ -446,7 +507,12 @@ public class InvariantDeviceProfile {
 
         allAppsCellSize = displayOption.allAppsCellSize;
         allAppsBorderSpaces = displayOption.allAppsBorderSpaces;
-        allAppsIconSize = displayOption.allAppsIconSizes;
+        allAppsIconSize = displayOption.allAppsIconSizes.clone();
+        if (iconScaleMult != 1.0f) {
+            for (int i = 0; i < allAppsIconSize.length; i++) {
+                allAppsIconSize[i] = allAppsIconSize[i] * iconScaleMult;
+            }
+        }
         allAppsIconTextSize = displayOption.allAppsIconTextSizes;
 
         inlineQsb = closestProfile.inlineQsb;
@@ -538,7 +604,8 @@ public class InvariantDeviceProfile {
     private Object[] toModelState() {
         return new Object[]{
                 numColumns, numRows, numSearchContainerColumns, numDatabaseHotseatIcons,
-                iconBitmapSize, fillResIconDpi, numDatabaseAllAppsColumns, dbFile, mLocale};
+                iconBitmapSize, fillResIconDpi, numDatabaseAllAppsColumns, dbFile, mLocale,
+                numFolderColumns[0], numFolderRows[0]};
     }
 
     /** Updates IDP using the provided context. Notifies listeners of change. */
