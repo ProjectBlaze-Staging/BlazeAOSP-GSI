@@ -70,19 +70,42 @@ public class LauncherActivity extends Activity {
     private void launch() {
         ActivityManager activities = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
 
-        Intent intent = findTask(activities);
-        if (intent != null) {
-            if (restoreTask(intent)) {
-                return;
-            } else {
-                // We failed to restore the task. It may happen when system was just updated and we
-                // moved the location of the targeted activity. Chances is that the rest of tasks
-                // can't be restored either, so clean those tasks and start a new one.
-                clearTask(activities);
+        // If the caller explicitly requested a new window (FLAG_ACTIVITY_MULTIPLE_TASK),
+        // start a new task; otherwise restore the existing Files task to the front.
+        boolean forceNewTask =
+                (getIntent().getFlags() & Intent.FLAG_ACTIVITY_MULTIPLE_TASK) != 0;
+        if (!forceNewTask) {
+            AppTask existingTask = findAppTask(activities);
+            if (existingTask != null) {
+                try {
+                    existingTask.moveToFront();
+                    return;
+                } catch (Exception e) {
+                    Log.w(TAG, "Failed to move existing task to front, falling back", e);
+                }
+            }
+            Intent intent = findTask(activities);
+            if (intent != null) {
+                if (restoreTask(intent)) {
+                    return;
+                } else {
+                    clearTask(activities);
+                }
             }
         }
 
         startTask();
+    }
+
+    private @Nullable AppTask findAppTask(ActivityManager activities) {
+        List<AppTask> tasks = activities.getAppTasks();
+        for (AppTask task : tasks) {
+            Intent intent = task.getTaskInfo().baseIntent;
+            if (intent != null && isLaunchUri(intent.getData())) {
+                return task;
+            }
+        }
+        return null;
     }
 
     private @Nullable Intent findTask(ActivityManager activities) {
