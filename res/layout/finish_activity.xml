@@ -1,146 +1,93 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-     SPDX-FileCopyrightText: 2016 The CyanogenMod Project
-     SPDX-FileCopyrightText: The LineageOS Project
      SPDX-FileCopyrightText: 2026 The BlazeAOSP Project
      SPDX-License-Identifier: Apache-2.0
 -->
-<android.widget.FrameLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/root"
-    android:orientation="vertical"
+<org.lineageos.setupwizard.widget.TouchRippleLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/setup_wizard_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true"
-    app:insetForeground="@android:color/transparent">
+    android:background="#0A0D14">
 
-    <!-- ColorOS 17 Living Flow 3D Ribbon Backdrop -->
     <org.lineageos.setupwizard.widget.LuminousBloomView
-        android:id="@+id/finish_bloom_background"
+        android:id="@+id/finish_bloom_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <ImageView
-        android:id="@+id/background"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone" />
-
     <LinearLayout
-        android:id="@+id/linear_layout"
+        android:id="@+id/finish_content_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
         android:gravity="center_horizontal"
-        style="@style/SudContentFrame">
+        android:orientation="vertical"
+        android:paddingStart="28dp"
+        android:paddingTop="68dp"
+        android:paddingEnd="28dp"
+        android:paddingBottom="36dp">
 
-        <!-- Compatibility logo view -->
-        <ImageView
-            android:id="@+id/brand_logo"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:src="@drawable/logo"
-            android:visibility="gone" />
-
-        <!-- Center Area: Particle Convergence + "17" Living Flow Core + Finale Typography -->
-        <LinearLayout
-            android:id="@+id/finish_hero_container"
+        <Space
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:paddingStart="24dp"
-            android:paddingEnd="24dp">
+            android:layout_weight="1" />
 
-            <org.lineageos.setupwizard.widget.ParticleConvergenceView
-                android:id="@+id/finish_particles"
+        <!-- Clean Frosted Completion Medallion -->
+        <FrameLayout
+            android:layout_width="76dp"
+            android:layout_height="76dp"
+            android:background="@drawable/btn_pill_secondary"
+            android:padding="20dp">
+
+            <ImageView
+                android:id="@+id/brand_logo"
                 android:layout_width="match_parent"
-                android:layout_height="230dp" />
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:src="@drawable/logo" />
+        </FrameLayout>
 
-            <TextView
-                android:id="@+id/finish_title"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Her Şey Hazır."
-                android:textColor="#FFFFFF"
-                android:textSize="32sp"
-                android:fontFamily="sans-serif-medium"
-                android:textStyle="bold"
-                android:layout_marginTop="8dp" />
-
-            <TextView
-                android:id="@+id/finish_subtitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="BlazeAOSP 17 • İpeksi Akıcılık ve Living Flow deneyimine hoş geldiniz."
-                android:textColor="#D8E6F8"
-                android:textSize="15sp"
-                android:gravity="center"
-                android:layout_marginTop="8dp" />
-
-            <!-- Feature Summary Pills -->
-            <LinearLayout
-                android:id="@+id/finish_feature_pills"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center"
-                android:layout_marginTop="18dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/btn_pill_secondary"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:paddingTop="6dp"
-                    android:paddingBottom="6dp"
-                    android:text="120Hz Laminar Flow"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp" />
-
-                <Space
-                    android:layout_width="8dp"
-                    android:layout_height="1dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/btn_pill_secondary"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:paddingTop="6dp"
-                    android:paddingBottom="6dp"
-                    android:text="Liquid Glass"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp" />
-
-                <Space
-                    android:layout_width="8dp"
-                    android:layout_height="1dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/btn_pill_secondary"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:paddingTop="6dp"
-                    android:paddingBottom="6dp"
-                    android:text="Dinamik Ada"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11.5sp" />
-            </LinearLayout>
-
-        </LinearLayout>
-
-        <org.lineageos.setupwizard.NavigationLayout
-            android:id="@+id/navigation_bar"
+        <TextView
+            android:id="@+id/finish_title"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:letterSpacing="-0.02"
+            android:text="Her Şey Hazır"
+            android:textColor="#F8FAFC"
+            android:textSize="34sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/finish_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="sans-serif"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp"
+            android:text="Cihazınız tercihlerinize göre yapılandırıldı.\nAna ekrana geçerek kullanmaya başlayabilirsiniz."
+            android:textColor="#94A3B8"
+            android:textSize="15sp" />
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1.2" />
+
+        <Button
+            android:id="@+id/start"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="@drawable/btn_pill_coloros"
+            android:elevation="2dp"
+            android:fontFamily="sans-serif-medium"
+            android:text="@string/start"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
 
-</android.widget.FrameLayout>
+</org.lineageos.setupwizard.widget.TouchRippleLayout>

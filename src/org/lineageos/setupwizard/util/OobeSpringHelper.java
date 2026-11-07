@@ -6,11 +6,14 @@
 package org.lineageos.setupwizard.util;
 
 import android.animation.TimeInterpolator;
+import android.content.Context;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.view.MotionEvent;
 import android.view.View;
 
 /**
- * 120Hz ColorOS 17 Laminar Flow & iOS 27 Liquid Glass spring physics helper for OOBE.
+ * 120Hz spring physics & haptic feedback helper for OOBE.
  * Uses analytical underdamped second-order spring interpolators on RenderThread.
  */
 public final class OobeSpringHelper {
@@ -20,7 +23,7 @@ public final class OobeSpringHelper {
 
     /**
      * Analytical underdamped/nearly-critically-damped spring interpolator:
-     *zeta = 0.78, omega0 = 18 rad/s -> silky ColorOS 17 tactile snap.
+     * zeta = 0.78, omega0 = 18 rad/s -> silky tactile snap.
      */
     public static final TimeInterpolator LAMINAR_SPRING_INTERPOLATOR = input -> {
         if (input <= 0f) return 0f;
@@ -33,6 +36,13 @@ public final class OobeSpringHelper {
                 + ((zeta * omega0) / omegaD) * Math.sin(omegaD * input);
         return (float) (1.0 - env * osc);
     };
+
+    /**
+     * Attaches default 120Hz tactile press-scale spring physics (0.96f) to a view.
+     */
+    public static void attachPressSpring(View view) {
+        attachTouchSpring(view, 0.96f);
+    }
 
     /**
      * Attaches 120Hz tactile press-scale spring physics to any interactive card or button.
@@ -61,6 +71,28 @@ public final class OobeSpringHelper {
             }
             return false;
         });
+    }
+
+    public static void vibrateTick(Context context) {
+        if (context == null) return;
+        try {
+            Vibrator vib = context.getSystemService(Vibrator.class);
+            if (vib != null && vib.hasVibrator()) {
+                vib.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK));
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public static void vibrateSuccess(Context context) {
+        if (context == null) return;
+        try {
+            Vibrator vib = context.getSystemService(Vibrator.class);
+            if (vib != null && vib.hasVibrator()) {
+                vib.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK));
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     /**

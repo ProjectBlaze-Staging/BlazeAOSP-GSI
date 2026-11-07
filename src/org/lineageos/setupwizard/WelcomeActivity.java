@@ -1,110 +1,44 @@
 /*
  * SPDX-FileCopyrightText: 2016 The CyanogenMod Project
- * SPDX-FileCopyrightText: The LineageOS Project
+ * SPDX-FileCopyrightText: 2017-2024 The LineageOS Project
+ * SPDX-FileCopyrightText: 2026 The BlazeAOSP Project
  * SPDX-License-Identifier: Apache-2.0
  */
 
 package org.lineageos.setupwizard;
 
-import static org.lineageos.setupwizard.SetupWizardApp.ACTION_EMERGENCY_DIAL;
-
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Build;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
-import com.google.android.setupcompat.template.FooterButtonStyleUtils;
-import com.google.android.setupcompat.util.SystemBarHelper;
+import com.android.internal.app.LocalePicker;
+import com.android.internal.util.EmergencyAffordanceManager;
 
+import org.lineageos.setupwizard.util.OobeSpringHelper;
 import org.lineageos.setupwizard.util.SetupWizardUtils;
+import org.lineageos.setupwizard.widget.LuminousBloomView;
+
+import java.util.List;
+import java.util.Locale;
 
 public class WelcomeActivity extends SubBaseActivity {
 
-    private static final String ACTION_ACCESSIBILITY_SETTINGS =
-            "android.settings.ACCESSIBILITY_SETTINGS_FOR_SUW";
-
-    @Override
-    protected void onStartSubactivity() {
-    }
+    private LuminousBloomView mBloomView;
+    private View mContentContainer;
+    private TextView mCurrentLocaleText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         onSetupStart();
-        SystemBarHelper.setBackButtonVisible(getWindow(), false);
-        setNextText(R.string.start);
-        Button startButton = findViewById(R.id.start);
-        Button emergButton = findViewById(R.id.emerg_dialer);
-        Button skipButton = findViewById(R.id.skip);
-        startButton.setOnClickListener(view -> onNextPressed());
-        findViewById(R.id.launch_accessibility)
-                .setOnClickListener(
-                        view -> startSubactivity(new Intent(ACTION_ACCESSIBILITY_SETTINGS)));
-
-        if (SetupWizardUtils.hasTelephony(this)) {
-            setSkipText(R.string.emergency_call);
-            emergButton.setOnClickListener(
-                    view -> startSubactivity(new Intent(ACTION_EMERGENCY_DIAL)));
-        } else {
-            emergButton.setVisibility(View.GONE);
-        }
-
-        TextView welcomeTitle = findViewById(R.id.welcome_title);
-        if (SetupWizardUtils.isManagedProfile(this)) {
-            welcomeTitle.setText(getString(R.string.setup_managed_profile_welcome_message));
-        } else {
-            welcomeTitle.setText(getString(R.string.setup_welcome_message,
-                    getString(R.string.os_name)));
-        }
-
-        if (Build.TYPE.equals("eng")) {
-            skipButton.setVisibility(View.VISIBLE);
-            skipButton.setOnClickListener(v -> {
-                SetupWizardUtils.finishSetupWizard(WelcomeActivity.this);
-            });
-        }
-
-        // Initialize and choreograph ColorOS 17 opening animation suite
-        org.lineageos.setupwizard.widget.LuminousBloomView bloomView = findViewById(R.id.bloom_background);
-        org.lineageos.setupwizard.widget.PeekingMascotView mascotView = findViewById(R.id.peeking_mascot);
-        org.lineageos.setupwizard.widget.TouchRippleLayout touchLayout = findViewById(R.id.touch_ripple_layout);
-        org.lineageos.setupwizard.widget.TypewriterTextView typewriter = findViewById(R.id.typewriter_text);
-        org.lineageos.setupwizard.widget.ParticleConvergenceView particles = findViewById(R.id.particle_convergence);
-        View accessibilityButton = findViewById(R.id.launch_accessibility);
-
-        org.lineageos.setupwizard.util.OobeSpringHelper.attachTouchSpring(startButton, 0.94f);
-        org.lineageos.setupwizard.util.OobeSpringHelper.attachTouchSpring(emergButton, 0.95f);
-        org.lineageos.setupwizard.util.OobeSpringHelper.attachTouchSpring(accessibilityButton, 0.95f);
-        org.lineageos.setupwizard.util.OobeSpringHelper.attachTouchSpring(skipButton, 0.95f);
-        org.lineageos.setupwizard.util.OobeSpringHelper.playEntranceCascade(
-                typewriter, particles, startButton, emergButton, accessibilityButton);
-
-        if (touchLayout != null && mascotView != null) {
-            touchLayout.setMascotView(mascotView);
-        }
-
-        if (bloomView != null) {
-            bloomView.startBloomAnimation(2600, () -> {
-                if (typewriter != null) {
-                    typewriter.startTyping(() -> {
-                        if (particles != null) {
-                            particles.startConvergence(1800);
-                        }
-                    });
-                }
-            });
-        }
+        setNextAllowed(true);
     }
 
     @Override
-    public void onBackPressed() {
-    }
-
-    @Override
-    protected com.google.android.setupdesign.GlifLayout getGlifLayout() {
-        return null;
+    protected void onStartSubactivity() {
     }
 
     @Override
@@ -115,5 +49,158 @@ public class WelcomeActivity extends SubBaseActivity {
     @Override
     protected int getTitleResId() {
         return -1;
+    }
+
+    @Override
+    protected int getIconResId() {
+        return -1;
+    }
+
+    @Override
+    protected com.google.android.setupdesign.GlifLayout getGlifLayout() {
+        return null;
+    }
+
+    @Override
+    protected void onPostCreate(Bundle savedInstanceState) {
+        super.onPostCreate(savedInstanceState);
+
+        View glifLayout = findViewById(R.id.setup_wizard_layout);
+        if (glifLayout != null) {
+            View footer = glifLayout.findViewWithTag("suc_layout_footer");
+            if (footer != null) {
+                footer.setVisibility(View.GONE);
+            }
+        }
+
+        mBloomView = findViewById(R.id.luminous_bloom_view);
+        mContentContainer = findViewById(R.id.welcome_content_container);
+        mCurrentLocaleText = findViewById(R.id.current_locale_text);
+
+        Button startButton = findViewById(R.id.start);
+        Button emergButton = findViewById(R.id.emerg_button);
+        Button accessibilityButton = findViewById(R.id.accessibility_button);
+        View langCard = findViewById(R.id.language_selector_card);
+
+        updateDisplayedLocale();
+
+        if (startButton != null) {
+            OobeSpringHelper.attachPressSpring(startButton);
+            startButton.setOnClickListener(view -> {
+                OobeSpringHelper.vibrateSuccess(this);
+                onNextPressed();
+            });
+        }
+
+        if (langCard != null) {
+            OobeSpringHelper.attachPressSpring(langCard);
+            langCard.setOnClickListener(v -> {
+                OobeSpringHelper.vibrateTick(this);
+                showQuickLocaleDialog();
+            });
+        }
+
+        if (accessibilityButton != null) {
+            OobeSpringHelper.attachPressSpring(accessibilityButton);
+            accessibilityButton.setOnClickListener(view -> {
+                OobeSpringHelper.vibrateTick(this);
+                try {
+                    Intent intent = new Intent("com.android.settings.ACCESSIBILITY_COLOR_SPACE_SETTINGS");
+                    if (intent.resolveActivity(getPackageManager()) == null) {
+                        intent = new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                    }
+                    startSubactivity(intent);
+                } catch (Exception e) {
+                    try {
+                        startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                    } catch (Exception ignored) {}
+                }
+            });
+        }
+
+        if (emergButton != null) {
+            if (SetupWizardUtils.hasTelephony(this)) {
+                emergButton.setVisibility(View.VISIBLE);
+                OobeSpringHelper.attachPressSpring(emergButton);
+                emergButton.setOnClickListener(view -> {
+                    OobeSpringHelper.vibrateTick(this);
+                    startSubactivity(new Intent(SetupWizardApp.ACTION_EMERGENCY_DIAL));
+                });
+
+                if (new EmergencyAffordanceManager(this).needsEmergencyAffordance()) {
+                    emergButton.setOnLongClickListener(view -> {
+                        new EmergencyAffordanceManager(WelcomeActivity.this).performEmergencyCall();
+                        return true;
+                    });
+                }
+            } else {
+                emergButton.setVisibility(View.GONE);
+            }
+        }
+
+        runEntranceChoreography();
+    }
+
+    private void updateDisplayedLocale() {
+        if (mCurrentLocaleText == null) return;
+        Locale current = Locale.getDefault();
+        String display = current.getDisplayName(current);
+        if (display != null && !display.isEmpty()) {
+            display = display.substring(0, 1).toUpperCase(current) + display.substring(1);
+            mCurrentLocaleText.setText(display);
+        }
+    }
+
+    private void showQuickLocaleDialog() {
+        try {
+            final List<LocalePicker.LocaleInfo> locales = LocalePicker.getAllAssetLocales(this, false);
+            if (locales == null || locales.isEmpty()) return;
+
+            final CharSequence[] labels = new CharSequence[locales.size()];
+            Locale current = Locale.getDefault();
+            int checkedIndex = 0;
+
+            for (int i = 0; i < locales.size(); i++) {
+                LocalePicker.LocaleInfo info = locales.get(i);
+                labels[i] = info.getLabel();
+                if (info.getLocale() != null && info.getLocale().getLanguage().equals(current.getLanguage())) {
+                    checkedIndex = i;
+                }
+            }
+
+            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(R.string.setup_locale)
+                    .setSingleChoiceItems(labels, checkedIndex, (dialog, which) -> {
+                        LocalePicker.LocaleInfo chosen = locales.get(which);
+                        if (chosen != null && chosen.getLocale() != null) {
+                            OobeSpringHelper.vibrateSuccess(this);
+                            LocalePicker.updateLocale(chosen.getLocale());
+                            updateDisplayedLocale();
+                        }
+                        dialog.dismiss();
+                    })
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+        } catch (Throwable ignored) {}
+    }
+
+    private void runEntranceChoreography() {
+        if (mContentContainer != null) {
+            float d = getResources().getDisplayMetrics().density;
+            mContentContainer.setAlpha(0f);
+            mContentContainer.setTranslationY(18f * d);
+            mContentContainer.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(420)
+                    .start();
+        }
+        if (mBloomView != null) {
+            mBloomView.startBloomAnimation(700, null);
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
     }
 }
