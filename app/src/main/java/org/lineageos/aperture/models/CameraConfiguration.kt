@@ -1,123 +1,98 @@
 /*
- * SPDX-FileCopyrightText: The LineageOS Project
+ * SPDX-FileCopyrightText: 2024 The LineageOS Project
  * SPDX-License-Identifier: Apache-2.0
  */
 
 package org.lineageos.aperture.models
 
 import androidx.camera.core.AspectRatio
+import androidx.camera.core.ImageCapture
 import androidx.camera.extensions.ExtensionMode
 import androidx.camera.video.Quality
 
 /**
- * Camera configuration. Should only contain information about the session that can only be
- * configured at binding time.
+ * Current camera runtime configuration. Note that skipping validations here won't help since paths
+ * after this point assume everything has already been validated and may cause disruptions if not.
  */
 sealed interface CameraConfiguration {
     /**
-     * Camera2 interop options.
-     *
-     * @param edgeMode The [EdgeMode] to use
-     * @param noiseReductionMode The [NoiseReductionMode] to use
-     * @param shadingMode The [ShadingMode] to use
-     * @param colorCorrectionAberrationMode The [ColorCorrectionAberrationMode] to use
-     * @param distortionCorrectionMode The [DistortionCorrectionMode] to use
-     * @param hotPixelMode The [HotPixelMode] to use
-     */
-    data class Camera2Options(
-        val edgeMode: EdgeMode?,
-        val noiseReductionMode: NoiseReductionMode?,
-        val shadingMode: ShadingMode?,
-        val colorCorrectionAberrationMode: ColorCorrectionAberrationMode?,
-        val distortionCorrectionMode: DistortionCorrectionMode?,
-        val hotPixelMode: HotPixelMode?,
-    ) {
-        companion object {
-            /**
-             * Default instance that will not alter Camera2 options.
-             */
-            val DEFAULT = Camera2Options(
-                edgeMode = null,
-                noiseReductionMode = null,
-                shadingMode = null,
-                colorCorrectionAberrationMode = null,
-                distortionCorrectionMode = null,
-                hotPixelMode = null,
-            )
-        }
-    }
-
-    /**
-     * The [Camera] to use.
+     * The active [Camera].
      */
     val camera: Camera
 
     /**
-     * The [CameraMode] to use.
+     * The current [CameraMode].
      */
     val cameraMode: CameraMode
 
     /**
-     * The [ExtensionMode.Mode] to use.
+     * Current CameraX [ExtensionMode]. Defaults to [ExtensionMode.NONE].
      */
     @ExtensionMode.Mode
     val extensionMode: Int
+        get() = ExtensionMode.NONE
 
     /**
-     * The [Camera2Options] to use.
+     * Optional Camera2's CaptureRequest options. Not respected when [extensionMode] isn't
+     * [ExtensionMode.NONE].
      */
+    data class Camera2Options(
+        val edgeMode: EdgeMode? = null,
+        val noiseReductionMode: NoiseReductionMode? = null,
+        val shadingMode: ShadingMode? = null,
+        val colorCorrectionAberrationMode: ColorCorrectionAberrationMode? = null,
+        val distortionCorrectionMode: DistortionCorrectionMode? = null,
+        val hotPixelMode: HotPixelMode? = null,
+        val manualIso: Int? = null,
+        val manualExposureTimeNs: Long? = null,
+        val manualFocusDistance: Float? = null,
+        val whiteBalanceMode: ProWhiteBalanceMode = ProWhiteBalanceMode.AUTO,
+    )
+
     val camera2Options: Camera2Options
+        get() = Camera2Options()
 
     /**
-     * Photo mode configuration.
-     *
-     * @param photoAspectRatio The [AspectRatio.Ratio] to use
-     * @param enableHighResolution Whether to enable high resolution or not
-     * @param photoCaptureMode The `ImageCapture.CAPTURE_MODE_*` to use
-     * @param photoOutputFormat The [PhotoOutputFormat] to use
+     * Photo capture session configuration (used for PHOTO, NIGHT, and PRO_PHOTO).
      */
     data class Photo(
         override val camera: Camera,
+        override val cameraMode: CameraMode = CameraMode.PHOTO,
         override val extensionMode: Int,
         override val camera2Options: Camera2Options,
-        val photoCaptureMode: Int,
-        val photoAspectRatio: Int,
+        @ImageCapture.CaptureMode val photoCaptureMode: Int,
+        @AspectRatio.Ratio val photoAspectRatio: Int,
         val enableHighResolution: Boolean,
         val photoOutputFormat: PhotoOutputFormat,
-    ) : CameraConfiguration {
-        override val cameraMode = CameraMode.PHOTO
-    }
+        val photoResolutionPreset: PhotoResolutionPreset = PhotoResolutionPreset.FULL,
+    ) : CameraConfiguration
 
     /**
-     * Video mode configuration.
-     *
-     * @param videoQuality The [Quality] to use
-     * @param videoFrameRate The [FrameRate] to use
-     * @param videoDynamicRange The [VideoDynamicRange] to use
-     * @param videoMirrorMode The [VideoMirrorMode] to use
-     * @param enableVideoStabilization Whether to enable video stabilization or not
+     * Video capture session configuration (used for VIDEO and PRO_VIDEO).
      */
     data class Video(
         override val camera: Camera,
+        override val cameraMode: CameraMode = CameraMode.VIDEO,
         override val camera2Options: Camera2Options,
         val videoQuality: Quality,
+        val videoResolutionPreset: VideoResolutionPreset = VideoResolutionPreset.fromQuality(videoQuality),
         val videoFrameRate: FrameRate?,
         val videoDynamicRange: VideoDynamicRange,
         val videoMirrorMode: VideoMirrorMode,
         val enableVideoStabilization: Boolean,
-    ) : CameraConfiguration {
-        override val cameraMode = CameraMode.VIDEO
-        override val extensionMode = ExtensionMode.NONE
-    }
+        val videoStabilizationMode: VideoStabilizationMode = if (enableVideoStabilization) {
+            VideoStabilizationMode.getMode(camera)
+        } else {
+            VideoStabilizationMode.OFF
+        },
+    ) : CameraConfiguration
 
     /**
-     * QR mode configuration.
+     * QR scan session configuration.
      */
     data class Qr(
         override val camera: Camera,
     ) : CameraConfiguration {
         override val cameraMode = CameraMode.QR
-        override val extensionMode = ExtensionMode.NONE
-        override val camera2Options = Camera2Options.DEFAULT
     }
 }

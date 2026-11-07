@@ -9,6 +9,8 @@ import android.animation.ValueAnimator
 import android.app.Application
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.location.LocationManager
 import android.net.Uri
@@ -30,6 +32,7 @@ import androidx.camera.view.video.AudioConfig
 import androidx.core.animation.addListener
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationRequestCompat
+import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
@@ -84,10 +87,14 @@ import org.lineageos.aperture.models.HotPixelMode
 import org.lineageos.aperture.models.IslandItem
 import org.lineageos.aperture.models.NoiseReductionMode
 import org.lineageos.aperture.models.PhotoOutputFormat
+import org.lineageos.aperture.models.PhotoResolutionPreset
+import org.lineageos.aperture.models.ProWhiteBalanceMode
 import org.lineageos.aperture.models.Rotation
 import org.lineageos.aperture.models.ShadingMode
 import org.lineageos.aperture.models.ThermalStatus
 import org.lineageos.aperture.models.TimerMode
+import org.lineageos.aperture.models.VideoResolutionPreset
+import org.lineageos.aperture.models.VideoStabilizationMode
 import org.lineageos.aperture.qr.QrImageAnalyzer
 import org.lineageos.aperture.repositories.CameraRepository
 import org.lineageos.aperture.utils.CameraSoundsUtils
@@ -358,10 +365,11 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         preferencesRepository.videoFlashMode,
         qrFlashMode,
     ) { cameraConfiguration, photoFlashMode, videoFlashMode, qrFlashMode ->
-        when (cameraConfiguration.cameraMode) {
-            CameraMode.PHOTO -> photoFlashMode
-            CameraMode.VIDEO -> videoFlashMode
-            CameraMode.QR -> qrFlashMode
+        when {
+            cameraConfiguration.cameraMode.isPhotoMode -> photoFlashMode
+            cameraConfiguration.cameraMode.isVideoMode -> videoFlashMode
+            cameraConfiguration.cameraMode == CameraMode.QR -> qrFlashMode
+            else -> FlashMode.OFF
         }
     }
         .flowOn(Dispatchers.IO)
@@ -383,7 +391,7 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         val flashMode = wantedFlashMode.takeIf { it in supportedFlashModes } ?: FlashMode.OFF
 
         val shouldForceTorch = forceTorch
-                && cameraConfiguration.cameraMode == CameraMode.PHOTO
+                && cameraConfiguration.cameraMode.isPhotoMode
                 && FlashMode.TORCH in cameraConfiguration.camera.supportedFlashModes
 
         when (shouldForceTorch) {
@@ -405,7 +413,7 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         cameraState,
         cameraMode,
     ) { cameraState, cameraMode ->
-        cameraState == CameraState.IDLE || cameraMode == CameraMode.VIDEO
+        cameraState == CameraState.IDLE || cameraMode.isVideoMode
     }
         .flowOn(Dispatchers.IO)
         .stateIn(
@@ -590,7 +598,7 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
     ) { cameraMode, cameraState ->
         when (cameraState) {
             CameraState.IDLE -> true
-            CameraState.COUNTDOWN -> cameraMode == CameraMode.VIDEO
+            CameraState.COUNTDOWN -> cameraMode.isVideoMode
             CameraState.TAKING_PHOTO -> false
             CameraState.PRE_RECORDING_VIDEO -> false
             CameraState.RECORDING_VIDEO -> true
@@ -605,6 +613,24 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         )
 
     // Photo
+
+    /**
+     * Photo resolution preset (FULL, 2.5K, 2K, FHD).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val photoResolutionPreset = cameraConfiguration
+        .mapLatest { cameraConfiguration ->
+            when (cameraConfiguration) {
+                is CameraConfiguration.Photo -> cameraConfiguration.photoResolutionPreset
+                else -> preferencesRepository.photoResolutionPreset.value
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = preferencesRepository.photoResolutionPreset.value,
+        )
 
     /**
      * Photo capture mode.
@@ -677,6 +703,116 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
     // Video
 
     /**
+     * Video resolution preset (including 2K and 2.5K).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val videoResolutionPreset = cameraConfiguration
+        .mapLatest { cameraConfiguration ->
+            when (cameraConfiguration) {
+                is CameraConfiguration.Video -> cameraConfiguration.videoResolutionPreset
+                else -> preferencesRepository.videoResolutionPreset.value
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = preferencesRepository.videoResolutionPreset.value,
+        )
+
+    /**
+     * Video stabilization mode (OFF, EIS, OIS, EIS_OIS).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val videoStabilizationMode = cameraConfiguration
+        .mapLatest { cameraConfiguration ->
+            when (cameraConfiguration) {
+                is CameraConfiguration.Video -> cameraConfiguration.videoStabilizationMode
+                else -> preferencesRepository.videoStabilizationMode.value
+                    ?: VideoStabilizationMode.OFF
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = preferencesRepository.videoStabilizationMode.value
+                ?: VideoStabilizationMode.OFF,
+        )
+
+    val isVideoStabilizationButtonVisible = combine(
+        camera,
+        cameraMode,
+    ) { camera, cameraMode ->
+        cameraMode.isVideoMode && VideoStabilizationMode.getSelectableModes(camera).size > 1
+    }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = false,
+        )
+
+    // Pro manual controls state
+    private val manualIsoState = MutableStateFlow<Int?>(null)
+    private val manualShutterSpeedNsState = MutableStateFlow<Long?>(null)
+    private val manualWhiteBalanceState = MutableStateFlow(ProWhiteBalanceMode.AUTO)
+    private val manualFocusDistanceState = MutableStateFlow<Float?>(null)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val proIso = cameraConfiguration
+        .mapLatest { it.camera2Options.manualIso }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = null,
+        )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val proShutterSpeedNs = cameraConfiguration
+        .mapLatest { it.camera2Options.manualExposureTimeNs }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = null,
+        )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val proWhiteBalance = cameraConfiguration
+        .mapLatest { it.camera2Options.whiteBalanceMode }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = ProWhiteBalanceMode.AUTO,
+        )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val proFocusDistance = cameraConfiguration
+        .mapLatest { it.camera2Options.manualFocusDistance }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = null,
+        )
+
+    val isProFocusVisible = combine(
+        camera,
+        cameraMode,
+    ) { camera, cameraMode ->
+        cameraMode.isProMode && camera.minFocusDistance > 0f
+    }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = false,
+        )
+
+    /**
      * Video quality.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -698,7 +834,7 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         camera,
         cameraState,
     ) { camera, cameraState ->
-        cameraState == CameraState.IDLE && camera.supportedVideoQualities.size > 1
+        cameraState == CameraState.IDLE && camera.supportedVideoResolutionPresets.size > 1
     }
         .flowOn(Dispatchers.IO)
         .stateIn(
@@ -1089,6 +1225,19 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
                     "Photo capture succeeded: ${output.savedUri} format = ${output.imageFormat}"
                 )
 
+                val targetMaxEdge = photoResolutionPreset.value.maxLongEdge
+                if (
+                    targetMaxEdge > 0 &&
+                    (imageOutputFormat == ImageCapture.OUTPUT_FORMAT_JPEG ||
+                        imageOutputFormat == ImageCapture.OUTPUT_FORMAT_JPEG_ULTRA_HDR ||
+                        (imageOutputFormat == ImageCapture.OUTPUT_FORMAT_RAW_JPEG &&
+                            output.imageFormat !in RAW_FORMATS))
+                ) {
+                    output.savedUri?.let { savedUri ->
+                        downscaleSavedJpegUriIfNeeded(savedUri, targetMaxEdge)
+                    }
+                }
+
                 if (!inSingleCaptureMode.value) {
                     output.savedUri?.let {
                         mediaRepository.broadcastNewPicture(it)
@@ -1316,7 +1465,7 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         val cameraConfiguration = _cameraConfiguration.value ?: return false
 
         // Long-press is supported only on photo mode and if torch mode is available
-        val forceTorchAvailable = cameraConfiguration.cameraMode == CameraMode.PHOTO
+        val forceTorchAvailable = cameraConfiguration.cameraMode.isPhotoMode
                 && cameraConfiguration.camera.supportedFlashModes.contains(FlashMode.TORCH)
         if (forceTorch && !forceTorchAvailable) {
             this.forceTorch.value = false
@@ -1336,10 +1485,13 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
                 }
 
                 false -> supportedFlashModes.value.toList().next(flashMode.value)?.let {
-                    when (cameraConfiguration.cameraMode) {
-                        CameraMode.PHOTO -> preferencesRepository.photoFlashMode.value = it
-                        CameraMode.VIDEO -> preferencesRepository.videoFlashMode.value = it
-                        CameraMode.QR -> qrFlashMode.value = it
+                    when {
+                        cameraConfiguration.cameraMode.isPhotoMode ->
+                            preferencesRepository.photoFlashMode.value = it
+                        cameraConfiguration.cameraMode.isVideoMode ->
+                            preferencesRepository.videoFlashMode.value = it
+                        cameraConfiguration.cameraMode == CameraMode.QR ->
+                            qrFlashMode.value = it
                     }
                 }
             }
@@ -1419,19 +1571,29 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         }
 
     /**
-     * Cycle the video quality.
+     * Cycle the intermediate photo resolution preset (FULL -> 2.5K -> 2K -> FHD).
+     */
+    fun cyclePhotoResolutionPreset() =
+        updateConfiguration<CameraConfiguration.Photo> { cameraConfiguration ->
+            val newPreset = cameraConfiguration.photoResolutionPreset.next()
+                ?: PhotoResolutionPreset.FULL
+            preferencesRepository.photoResolutionPreset.value = newPreset
+            cameraConfiguration.copy(
+                photoResolutionPreset = newPreset,
+            )
+        }
+
+    /**
+     * Cycle the video quality (including intermediate 2K and 2.5K presets).
      */
     fun cycleVideoQuality() =
         updateConfiguration<CameraConfiguration.Video> { cameraConfiguration ->
-            val videoQuality =
-                cameraConfiguration.camera.supportedVideoQualities.keys.toList()
-                    .sortedWith { a, b ->
-                        listOf(Quality.SD, Quality.HD, Quality.FHD, Quality.UHD).let {
-                            it.indexOf(a) - it.indexOf(b)
-                        }
-                    }.next(cameraConfiguration.videoQuality) ?: error(
-                    "No video quality supported by the camera"
-                )
+            val presets = cameraConfiguration.camera.supportedVideoResolutionPresets
+            val newPreset = presets.next(cameraConfiguration.videoResolutionPreset)
+                ?: presets.firstOrNull()
+                ?: error("No video quality supported by the camera")
+
+            val videoQuality = newPreset.underlyingQuality
 
             val videoQualityInfo = cameraConfiguration.camera.supportedVideoQualities[
                 videoQuality
@@ -1448,12 +1610,144 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
             )
 
             preferencesRepository.videoQuality.value = videoQuality
+            preferencesRepository.videoResolutionPreset.value = newPreset
 
             cameraConfiguration.copy(
                 videoQuality = videoQuality,
+                videoResolutionPreset = newPreset,
                 videoFrameRate = videoFrameRate,
                 videoDynamicRange = videoDynamicRange,
             )
+        }
+
+    /**
+     * Cycle the video stabilization mode (OFF -> EIS -> OIS -> EIS+OIS).
+     */
+    fun cycleVideoStabilizationMode() =
+        updateConfiguration<CameraConfiguration.Video> { cameraConfiguration ->
+            val modes = VideoStabilizationMode.getSelectableModes(cameraConfiguration.camera)
+            val newMode = modes.next(cameraConfiguration.videoStabilizationMode)
+                ?: VideoStabilizationMode.OFF
+
+            preferencesRepository.videoStabilizationMode.value = newMode
+            preferencesRepository.videoStabilization.value = newMode != VideoStabilizationMode.OFF
+
+            cameraConfiguration.copy(
+                enableVideoStabilization = newMode != VideoStabilizationMode.OFF,
+                videoStabilizationMode = newMode,
+            )
+        }
+
+    /**
+     * Cycle Pro manual ISO value.
+     */
+    fun cycleProIso() =
+        updateConfiguration<CameraConfiguration> { cameraConfiguration ->
+            val range = cameraConfiguration.camera.isoRange
+            val candidates = buildList<Int?> {
+                add(null)
+                listOf(50, 100, 200, 400, 800, 1600, 3200).forEach { iso ->
+                    if (range == null || iso in range) add(iso)
+                }
+            }
+            val nextIso = candidates.next(manualIsoState.value)
+            manualIsoState.value = nextIso
+            val updatedOptions = cameraConfiguration.camera2Options.copy(manualIso = nextIso)
+            when (cameraConfiguration) {
+                is CameraConfiguration.Photo -> cameraConfiguration.copy(camera2Options = updatedOptions)
+                is CameraConfiguration.Video -> cameraConfiguration.copy(camera2Options = updatedOptions)
+                else -> cameraConfiguration
+            }
+        }
+
+    /**
+     * Cycle Pro manual shutter speed (exposure time in nanoseconds).
+     */
+    fun cycleProShutterSpeed() =
+        updateConfiguration<CameraConfiguration> { cameraConfiguration ->
+            val range = cameraConfiguration.camera.exposureTimeRange
+            val maxVideoNs = if (cameraConfiguration is CameraConfiguration.Video) {
+                val fps = cameraConfiguration.videoFrameRate?.value ?: 30
+                1_000_000_000L / fps
+            } else {
+                Long.MAX_VALUE
+            }
+            val candidates = buildList<Long?> {
+                add(null)
+                listOf(
+                    250_000L,       // 1/4000s
+                    1_000_000L,     // 1/1000s
+                    2_000_000L,     // 1/500s
+                    4_000_000L,     // 1/250s
+                    8_000_000L,     // 1/125s
+                    16_666_666L,    // 1/60s
+                    33_333_333L,    // 1/30s
+                    66_666_666L,    // 1/15s
+                    250_000_000L,   // 1/4s
+                    500_000_000L,   // 1/2s
+                    1_000_000_000L, // 1s
+                ).forEach { ns ->
+                    if (ns <= maxVideoNs && (range == null || ns in range)) {
+                        add(ns)
+                    }
+                }
+            }
+            val nextShutter = candidates.next(manualShutterSpeedNsState.value)
+            manualShutterSpeedNsState.value = nextShutter
+            val updatedOptions = cameraConfiguration.camera2Options.copy(
+                manualExposureTimeNs = nextShutter
+            )
+            when (cameraConfiguration) {
+                is CameraConfiguration.Photo -> cameraConfiguration.copy(camera2Options = updatedOptions)
+                is CameraConfiguration.Video -> cameraConfiguration.copy(camera2Options = updatedOptions)
+                else -> cameraConfiguration
+            }
+        }
+
+    /**
+     * Cycle Pro manual White Balance preset.
+     */
+    fun cycleProWhiteBalance() =
+        updateConfiguration<CameraConfiguration> { cameraConfiguration ->
+            val modes = cameraConfiguration.camera.supportedAwbModes
+            val nextWb = modes.next(manualWhiteBalanceState.value) ?: ProWhiteBalanceMode.AUTO
+            manualWhiteBalanceState.value = nextWb
+            val updatedOptions = cameraConfiguration.camera2Options.copy(
+                whiteBalanceMode = nextWb
+            )
+            when (cameraConfiguration) {
+                is CameraConfiguration.Photo -> cameraConfiguration.copy(camera2Options = updatedOptions)
+                is CameraConfiguration.Video -> cameraConfiguration.copy(camera2Options = updatedOptions)
+                else -> cameraConfiguration
+            }
+        }
+
+    /**
+     * Cycle Pro manual Focus distance (in diopters, 0.0f = infinity .. minFocusDistance = macro).
+     */
+    fun cycleProFocusDistance() =
+        updateConfiguration<CameraConfiguration> { cameraConfiguration ->
+            val maxDiopter = cameraConfiguration.camera.minFocusDistance
+            val candidates = buildList<Float?> {
+                add(null)
+                if (maxDiopter > 0f) {
+                    add(0f)
+                    listOf(0.5f, 2.0f, 4.0f).forEach { d ->
+                        if (d < maxDiopter) add(d)
+                    }
+                    add(maxDiopter)
+                }
+            }
+            val nextFocus = candidates.next(manualFocusDistanceState.value)
+            manualFocusDistanceState.value = nextFocus
+            val updatedOptions = cameraConfiguration.camera2Options.copy(
+                manualFocusDistance = nextFocus
+            )
+            when (cameraConfiguration) {
+                is CameraConfiguration.Photo -> cameraConfiguration.copy(camera2Options = updatedOptions)
+                is CameraConfiguration.Video -> cameraConfiguration.copy(camera2Options = updatedOptions)
+                else -> cameraConfiguration
+            }
         }
 
     /**
@@ -1646,19 +1940,26 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         camera: Camera,
         cameraMode: CameraMode,
     ) = when (cameraMode) {
-        CameraMode.PHOTO -> {
+        CameraMode.PHOTO,
+        CameraMode.NIGHT,
+        CameraMode.PRO_PHOTO -> {
             // Enable ZSL when requested by the user and supported by the camera
-            val photoCaptureMode = when (
-                val photoCaptureMode = preferencesRepository.photoCaptureMode.value
-            ) {
-                ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY -> when (
-                    preferencesRepository.enableZsl.value && camera.supportsZsl
+            val photoCaptureMode = when (cameraMode) {
+                CameraMode.NIGHT -> ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY
+                else -> when (
+                    val prefCaptureMode = preferencesRepository.photoCaptureMode.value
                 ) {
-                    true -> ImageCapture.CAPTURE_MODE_ZERO_SHUTTER_LAG
-                    false -> ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY
-                }
+                    ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY -> when (
+                        cameraMode == CameraMode.PHOTO &&
+                            preferencesRepository.enableZsl.value &&
+                            camera.supportsZsl
+                    ) {
+                        true -> ImageCapture.CAPTURE_MODE_ZERO_SHUTTER_LAG
+                        false -> ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY
+                    }
 
-                else -> photoCaptureMode
+                    else -> prefCaptureMode
+                }
             }
 
             val usePhotoJpegUltraHdr = preferencesRepository.usePhotoJpegUltraHdr.value
@@ -1684,19 +1985,70 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
                 else -> PhotoOutputFormat.JPEG
             }
 
+            val extensionMode = when (cameraMode) {
+                CameraMode.NIGHT -> if (camera.supportsExtensionMode(ExtensionMode.NIGHT)) {
+                    ExtensionMode.NIGHT
+                } else {
+                    ExtensionMode.NONE
+                }
+                CameraMode.PRO_PHOTO -> ExtensionMode.NONE
+                else -> preferencesRepository.photoEffect.value.takeIf {
+                    camera.supportsExtensionMode(it)
+                } ?: ExtensionMode.NONE
+            }
+
+            val baseCamera2Options = buildPhotoCamera2Options(camera, photoCaptureMode)
+            val camera2Options = when (cameraMode) {
+                CameraMode.NIGHT -> baseCamera2Options.copy(
+                    edgeMode = EdgeMode.HIGH_QUALITY.takeIf {
+                        camera.supportedEdgeModes.contains(it)
+                    } ?: baseCamera2Options.edgeMode,
+                    noiseReductionMode = NoiseReductionMode.HIGH_QUALITY.takeIf {
+                        camera.supportedNoiseReductionModes.contains(it)
+                    } ?: baseCamera2Options.noiseReductionMode,
+                    shadingMode = ShadingMode.HIGH_QUALITY.takeIf {
+                        camera.supportedShadingModes.contains(it)
+                    } ?: baseCamera2Options.shadingMode,
+                    colorCorrectionAberrationMode = ColorCorrectionAberrationMode.HIGH_QUALITY.takeIf {
+                        camera.supportedColorCorrectionAberrationModes.contains(it)
+                    } ?: baseCamera2Options.colorCorrectionAberrationMode,
+                    hotPixelMode = HotPixelMode.HIGH_QUALITY.takeIf {
+                        camera.supportedHotPixelModes.contains(it)
+                    } ?: baseCamera2Options.hotPixelMode,
+                )
+                CameraMode.PRO_PHOTO -> baseCamera2Options.copy(
+                    manualIso = manualIsoState.value,
+                    manualExposureTimeNs = manualShutterSpeedNsState.value,
+                    manualFocusDistance = manualFocusDistanceState.value,
+                    whiteBalanceMode = manualWhiteBalanceState.value,
+                )
+                else -> baseCamera2Options
+            }
+
             CameraConfiguration.Photo(
                 camera = camera,
-                extensionMode = preferencesRepository.photoEffect.value,
-                camera2Options = buildPhotoCamera2Options(camera, photoCaptureMode),
+                cameraMode = cameraMode,
+                extensionMode = extensionMode,
+                camera2Options = camera2Options,
                 photoCaptureMode = photoCaptureMode,
                 photoAspectRatio = preferencesRepository.photoAspectRatio.value,
                 enableHighResolution = overlaysRepository.enableHighResolution,
                 photoOutputFormat = photoOutputFormat,
+                photoResolutionPreset = preferencesRepository.photoResolutionPreset.value,
             )
         }
 
-        CameraMode.VIDEO -> {
-            val videoQuality = preferencesRepository.videoQuality.value.takeIf {
+        CameraMode.VIDEO,
+        CameraMode.PRO_VIDEO -> {
+            val savedPreset = preferencesRepository.videoResolutionPreset.value
+            val videoResolutionPreset = savedPreset.takeIf {
+                camera.supportedVideoResolutionPresets.contains(it)
+            } ?: camera.supportedVideoResolutionPresets.firstOrNull {
+                it.underlyingQuality == preferencesRepository.videoQuality.value
+            } ?: camera.supportedVideoResolutionPresets.firstOrNull()
+                ?: VideoResolutionPreset.FHD_1080P
+
+            val videoQuality = videoResolutionPreset.underlyingQuality.takeIf {
                 camera.supportedVideoQualities.contains(it)
             } ?: camera.supportedVideoQualities.keys.firstOrNull() ?: error(
                 "Camera ${camera.cameraId} does not support any video quality"
@@ -1716,20 +2068,109 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
                 "No video dynamic range supported by the camera"
             )
 
+            val enableVideoStabilization = preferencesRepository.videoStabilization.value
+            val selectableStabModes = VideoStabilizationMode.getSelectableModes(camera)
+            val videoStabilizationMode = if (!enableVideoStabilization) {
+                VideoStabilizationMode.OFF
+            } else {
+                preferencesRepository.videoStabilizationMode.value?.takeIf {
+                    selectableStabModes.contains(it)
+                } ?: VideoStabilizationMode.getMode(camera)
+            }
+
+            val baseVideoOptions = buildVideoCamera2Options(camera)
+            val camera2Options = if (cameraMode == CameraMode.PRO_VIDEO) {
+                baseVideoOptions.copy(
+                    manualIso = manualIsoState.value,
+                    manualExposureTimeNs = manualShutterSpeedNsState.value,
+                    manualFocusDistance = manualFocusDistanceState.value,
+                    whiteBalanceMode = manualWhiteBalanceState.value,
+                )
+            } else {
+                baseVideoOptions
+            }
+
             CameraConfiguration.Video(
                 camera = camera,
-                camera2Options = buildVideoCamera2Options(camera),
+                cameraMode = cameraMode,
+                camera2Options = camera2Options,
                 videoQuality = videoQuality,
+                videoResolutionPreset = videoResolutionPreset,
                 videoFrameRate = videoFrameRate,
                 videoDynamicRange = videoDynamicRange,
                 videoMirrorMode = preferencesRepository.videoMirrorMode.value,
-                enableVideoStabilization = preferencesRepository.videoStabilization.value,
+                enableVideoStabilization = enableVideoStabilization,
+                videoStabilizationMode = videoStabilizationMode,
             )
         }
 
         CameraMode.QR -> CameraConfiguration.Qr(
             camera = camera,
         )
+    }
+
+    private fun downscaleSavedJpegUriIfNeeded(uri: Uri, maxLongEdge: Int) {
+        runCatching {
+            val cr = applicationContext.contentResolver
+            val exifTags = mutableMapOf<String, String>()
+            val trackedTags = listOf(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.TAG_MAKE,
+                ExifInterface.TAG_MODEL,
+                ExifInterface.TAG_DATETIME,
+                ExifInterface.TAG_DATETIME_ORIGINAL,
+                ExifInterface.TAG_DATETIME_DIGITIZED,
+                ExifInterface.TAG_SUBSEC_TIME,
+                ExifInterface.TAG_GPS_LATITUDE,
+                ExifInterface.TAG_GPS_LATITUDE_REF,
+                ExifInterface.TAG_GPS_LONGITUDE,
+                ExifInterface.TAG_GPS_LONGITUDE_REF,
+                ExifInterface.TAG_ISO_SPEED_RATINGS,
+                ExifInterface.TAG_EXPOSURE_TIME,
+                ExifInterface.TAG_F_NUMBER,
+                ExifInterface.TAG_FOCAL_LENGTH,
+            )
+            cr.openInputStream(uri)?.use { input ->
+                val exif = ExifInterface(input)
+                for (tag in trackedTags) {
+                    exif.getAttribute(tag)?.let { exifTags[tag] = it }
+                }
+            }
+            val original = cr.openInputStream(uri)?.use { input ->
+                BitmapFactory.decodeStream(input)
+            } ?: return@runCatching
+
+            val width = original.width
+            val height = original.height
+            val longEdge = maxOf(width, height)
+            if (longEdge <= maxLongEdge) {
+                original.recycle()
+                return@runCatching
+            }
+
+            val scale = maxLongEdge.toFloat() / longEdge.toFloat()
+            val targetWidth = (width * scale).toInt().coerceAtLeast(1)
+            val targetHeight = (height * scale).toInt().coerceAtLeast(1)
+            val scaled = Bitmap.createScaledBitmap(original, targetWidth, targetHeight, true)
+            if (scaled !== original) {
+                original.recycle()
+            }
+
+            cr.openOutputStream(uri, "wt")?.use { out ->
+                scaled.compress(Bitmap.CompressFormat.JPEG, 95, out)
+            }
+            scaled.recycle()
+
+            cr.openFileDescriptor(uri, "rw")?.use { pfd ->
+                val exifOut = ExifInterface(pfd.fileDescriptor)
+                for ((tag, value) in exifTags) {
+                    exifOut.setAttribute(tag, value)
+                }
+                exifOut.saveAttributes()
+            }
+        }.onFailure {
+            Log.w(LOG_TAG, "Failed to downscale saved JPEG to $maxLongEdge", it)
+        }
     }
 
     @androidx.annotation.OptIn(ExperimentalZeroShutterLag::class)

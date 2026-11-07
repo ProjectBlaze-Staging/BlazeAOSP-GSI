@@ -117,6 +117,13 @@ class Camera private constructor(
             )
         }
 
+    val supportsOis: Boolean = run {
+        val availableOis = camera2CameraInfo.getCameraCharacteristic(
+            CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION
+        ) ?: IntArray(0)
+        availableOis.contains(CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON)
+    }
+
     val supportedVideoStabilizationModes = buildList {
         add(VideoStabilizationMode.OFF)
 
@@ -124,12 +131,14 @@ class Camera private constructor(
             CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES
         ) ?: IntArray(0)
 
+        var hasEis = false
         if (
             availableVideoStabilizationModes.contains(
                 CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON
             )
         ) {
             add(VideoStabilizationMode.ON)
+            hasEis = true
         }
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -138,6 +147,47 @@ class Camera private constructor(
             )
         ) {
             add(VideoStabilizationMode.ON_PREVIEW)
+            hasEis = true
+        }
+        if (supportsOis) {
+            add(VideoStabilizationMode.OIS)
+            if (hasEis) {
+                add(VideoStabilizationMode.EIS_OIS)
+            }
+        }
+    }
+
+    val supportedVideoResolutionPresets: List<VideoResolutionPreset> = buildList {
+        if (supportedVideoQualities.containsKey(Quality.SD)) add(VideoResolutionPreset.SD_480P)
+        if (supportedVideoQualities.containsKey(Quality.HD)) add(VideoResolutionPreset.HD_720P)
+        if (supportedVideoQualities.containsKey(Quality.FHD)) add(VideoResolutionPreset.FHD_1080P)
+        if (supportedVideoQualities.containsKey(Quality.UHD)) {
+            add(VideoResolutionPreset.QHD_2K)
+            add(VideoResolutionPreset.QHD_PLUS_2_5K)
+            add(VideoResolutionPreset.UHD_4K)
+        }
+    }
+
+    val isoRange: ClosedRange<Int>? = camera2CameraInfo.getCameraCharacteristic(
+        CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE
+    )?.let { it.lower..it.upper }
+
+    val exposureTimeRange: ClosedRange<Long>? = camera2CameraInfo.getCameraCharacteristic(
+        CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE
+    )?.let { it.lower..it.upper }
+
+    val minFocusDistance: Float = camera2CameraInfo.getCameraCharacteristic(
+        CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE
+    ) ?: 0f
+
+    val supportedAwbModes: List<ProWhiteBalanceMode> = buildList {
+        val rawModes = camera2CameraInfo.getCameraCharacteristic(
+            CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES
+        ) ?: IntArray(0)
+        for (mode in ProWhiteBalanceMode.entries) {
+            if (mode == ProWhiteBalanceMode.AUTO || rawModes.contains(mode.camera2Value)) {
+                add(mode)
+            }
         }
     }
 
@@ -263,8 +313,8 @@ class Camera private constructor(
     }
 
     fun supportsCameraMode(cameraMode: CameraMode): Boolean {
-        return when (cameraMode) {
-            CameraMode.VIDEO -> supportedVideoQualities.isNotEmpty()
+        return when {
+            cameraMode.isVideoMode -> supportedVideoQualities.isNotEmpty()
             else -> true
         }
     }

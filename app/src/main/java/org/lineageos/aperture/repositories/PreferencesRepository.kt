@@ -31,6 +31,7 @@ import org.lineageos.aperture.models.GridMode
 import org.lineageos.aperture.models.HardwareKey
 import org.lineageos.aperture.models.HotPixelMode
 import org.lineageos.aperture.models.NoiseReductionMode
+import org.lineageos.aperture.models.PhotoResolutionPreset
 import org.lineageos.aperture.models.Preference
 import org.lineageos.aperture.models.Preference.Companion.enumPreference
 import org.lineageos.aperture.models.Preference.Companion.primitivePreference
@@ -38,6 +39,8 @@ import org.lineageos.aperture.models.ShadingMode
 import org.lineageos.aperture.models.TimerMode
 import org.lineageos.aperture.models.VideoDynamicRange
 import org.lineageos.aperture.models.VideoMirrorMode
+import org.lineageos.aperture.models.VideoResolutionPreset
+import org.lineageos.aperture.models.VideoStabilizationMode
 
 /**
  * User preferences repository.
@@ -88,8 +91,11 @@ class PreferencesRepository(
         defaultValue = CameraMode.PHOTO,
         enumMapper = {
             when (it) {
+                CameraMode.NIGHT -> "night"
                 CameraMode.PHOTO -> "photo"
                 CameraMode.VIDEO -> "video"
+                CameraMode.PRO_PHOTO -> "pro_photo"
+                CameraMode.PRO_VIDEO -> "pro_video"
                 CameraMode.QR -> "qr"
             }
         },
@@ -242,6 +248,58 @@ class PreferencesRepository(
             Quality.FHD to "fhd",
             Quality.UHD to "uhd",
         ),
+    ).asPreferenceHolder()
+
+    /**
+     * Desired [VideoResolutionPreset] for videos (including 2K / 2.5K).
+     */
+    val videoResolutionPreset = enumPreference(
+        key = "video_resolution_preset",
+        defaultValue = VideoResolutionPreset.FHD_1080P,
+        enumMapper = {
+            when (it) {
+                VideoResolutionPreset.SD_480P -> "sd_480p"
+                VideoResolutionPreset.HD_720P -> "hd_720p"
+                VideoResolutionPreset.FHD_1080P -> "fhd_1080p"
+                VideoResolutionPreset.QHD_2K -> "qhd_2k"
+                VideoResolutionPreset.QHD_PLUS_2_5K -> "qhd_plus_2_5k"
+                VideoResolutionPreset.UHD_4K -> "uhd_4k"
+            }
+        },
+    ).asPreferenceHolder()
+
+    /**
+     * Desired [PhotoResolutionPreset] for photos (Full, 2.5K, 2K, FHD).
+     */
+    val photoResolutionPreset = enumPreference(
+        key = "photo_resolution_preset",
+        defaultValue = PhotoResolutionPreset.FULL,
+        enumMapper = {
+            when (it) {
+                PhotoResolutionPreset.FULL -> "full"
+                PhotoResolutionPreset.QHD_PLUS_2_5K -> "qhd_plus_2_5k"
+                PhotoResolutionPreset.QHD_2K -> "qhd_2k"
+                PhotoResolutionPreset.FHD_1080P -> "fhd_1080p"
+            }
+        },
+    ).asPreferenceHolder()
+
+    /**
+     * Desired [VideoStabilizationMode] (OFF, EIS, OIS, EIS_OIS).
+     */
+    val videoStabilizationMode = enumPreference(
+        key = "video_stabilization_mode",
+        defaultValue = null,
+        enumMapper = { it: VideoStabilizationMode? ->
+            when (it) {
+                null -> "default"
+                VideoStabilizationMode.OFF -> "off"
+                VideoStabilizationMode.ON -> "on"
+                VideoStabilizationMode.ON_PREVIEW -> "on_preview"
+                VideoStabilizationMode.OIS -> "ois"
+                VideoStabilizationMode.EIS_OIS -> "eis_ois"
+            }
+        },
     ).asPreferenceHolder()
 
     /**

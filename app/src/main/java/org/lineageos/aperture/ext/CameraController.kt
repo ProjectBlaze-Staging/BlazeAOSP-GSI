@@ -8,8 +8,11 @@ package org.lineageos.aperture.ext
 import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.TorchState
+import androidx.camera.video.Recorder
+import androidx.camera.video.VideoCapture
 import androidx.camera.view.CameraController
 import org.lineageos.aperture.models.FlashMode
+import org.lineageos.aperture.models.VideoResolutionPreset
 
 var CameraController.flashMode: FlashMode
     get() = when (torchState.value) {
@@ -37,3 +40,24 @@ var CameraController.flashMode: FlashMode
 val CameraController.camera2CameraControl: Camera2CameraControl?
     @androidx.camera.camera2.interop.ExperimentalCamera2Interop
     get() = cameraControl?.let { Camera2CameraControl.from(it) }
+
+fun CameraController.applyVideoResolutionPreset(preset: VideoResolutionPreset) {
+    if (preset.targetBitRate <= 0) {
+        return
+    }
+    runCatching {
+        val recorder = Recorder.Builder()
+            .setQualitySelector(videoCaptureQualitySelector)
+            .setTargetVideoEncodingBitRate(preset.targetBitRate)
+            .build()
+        val videoCapture = VideoCapture.Builder(recorder)
+            .setTargetFrameRate(videoCaptureTargetFrameRate)
+            .setMirrorMode(videoCaptureMirrorMode)
+            .setDynamicRange(videoCaptureDynamicRange)
+            .build()
+        CameraController::class.java.getDeclaredField("mVideoCapture").apply {
+            isAccessible = true
+            set(this@applyVideoResolutionPreset, videoCapture)
+        }
+    }
+}

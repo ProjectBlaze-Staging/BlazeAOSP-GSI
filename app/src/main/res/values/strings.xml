@@ -251,4 +251,24 @@
     <string name="video_mirror_mode_off">Off</string>
     <string name="video_mirror_mode_on">On</string>
     <string name="video_mirror_mode_on_ffc_only">Front facing camera only</string>
+
+    <!-- Additional camera modes, intermediate resolutions, stabilization & Pro controls -->
+    <string name="camera_mode_night">Night</string>
+    <string name="camera_mode_pro_photo">Pro Photo</string>
+    <string name="camera_mode_pro_video">Pro Video</string>
+    <string name="video_quality_2k" translatable="false">2K</string>
+    <string name="video_quality_2_5k" translatable="false">2.5K</string>
+    <string name="photo_resolution_full">FULL</string>
+    <string name="photo_resolution_2_5k" translatable="false">2.5K</string>
+    <string name="photo_resolution_2k" translatable="false">2K</string>
+    <string name="photo_resolution_fhd" translatable="false">FHD</string>
+    <string name="video_stabilization_off">STAB OFF</string>
+    <string name="video_stabilization_eis" translatable="false">EIS</string>
+    <string name="video_stabilization_ois" translatable="false">OIS</string>
+    <string name="video_stabilization_eis_ois" translatable="false">EIS+OIS</string>
+    <string name="pro_iso_auto">ISO AUTO</string>
+    <string name="pro_shutter_auto">S AUTO</string>
+    <string name="pro_wb_auto">WB AUTO</string>
+    <string name="pro_focus_auto">AF</string>
+    <string name="pro_focus_macro">MACRO</string>
 </resources>

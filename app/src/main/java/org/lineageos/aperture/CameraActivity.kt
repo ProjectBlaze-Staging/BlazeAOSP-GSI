@@ -24,6 +24,7 @@ import android.os.Looper
 import android.os.Message
 import android.provider.MediaStore
 import android.util.Log
+import android.util.Size
 import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -45,6 +46,7 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.MirrorMode
 import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.extensions.ExtensionMode
 import androidx.camera.video.Quality
 import androidx.camera.video.QualitySelector
@@ -81,6 +83,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.lineageos.aperture.ext.applyVideoResolutionPreset
 import org.lineageos.aperture.ext.camera2CameraControl
 import org.lineageos.aperture.ext.flashMode
 import org.lineageos.aperture.ext.mapToRange
@@ -93,6 +96,7 @@ import org.lineageos.aperture.ext.setFrameRate
 import org.lineageos.aperture.ext.setHotPixelMode
 import org.lineageos.aperture.ext.setNoiseReductionMode
 import org.lineageos.aperture.ext.setPadding
+import org.lineageos.aperture.ext.setProManualOptions
 import org.lineageos.aperture.ext.setShadingMode
 import org.lineageos.aperture.ext.setVideoStabilizationMode
 import org.lineageos.aperture.ext.slide
@@ -114,11 +118,14 @@ import org.lineageos.aperture.models.MediaType
 import org.lineageos.aperture.models.Permission
 import org.lineageos.aperture.models.PermissionState
 import org.lineageos.aperture.models.PhotoOutputFormat
+import org.lineageos.aperture.models.PhotoResolutionPreset
+import org.lineageos.aperture.models.ProWhiteBalanceMode
 import org.lineageos.aperture.models.Rotation
 import org.lineageos.aperture.models.ThermalStatus
 import org.lineageos.aperture.models.TimerMode
 import org.lineageos.aperture.models.VideoDynamicRange
 import org.lineageos.aperture.models.VideoMirrorMode
+import org.lineageos.aperture.models.VideoResolutionPreset
 import org.lineageos.aperture.models.VideoStabilizationMode
 import org.lineageos.aperture.ui.dialogs.LocationPermissionsDialog
 import org.lineageos.aperture.ui.dialogs.QrBottomSheetDialog
@@ -169,8 +176,13 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
     private val levelerView by lazy { findViewById<LevelerView>(R.id.levelerView) }
     private val mainLayout by lazy { findViewById<ConstraintLayout>(R.id.mainLayout) }
     private val micButton by lazy { findViewById<Button>(R.id.micButton) }
+    private val photoResolutionButton by lazy { findViewById<Button>(R.id.photoResolutionButton) }
     private val previewBlurView by lazy { findViewById<PreviewBlurView>(R.id.previewBlurView) }
     private val proButton by lazy { findViewById<ImageButton>(R.id.proButton) }
+    private val proFocusButton by lazy { findViewById<Button>(R.id.proFocusButton) }
+    private val proIsoButton by lazy { findViewById<Button>(R.id.proIsoButton) }
+    private val proShutterButton by lazy { findViewById<Button>(R.id.proShutterButton) }
+    private val proWbButton by lazy { findViewById<Button>(R.id.proWbButton) }
     private val screenFlashView by lazy { findViewById<ScreenFlashView>(R.id.screenFlashView) }
     private val secondaryBottomBarLayout by lazy { findViewById<ConstraintLayout>(R.id.secondaryBottomBarLayout) }
     private val secondaryTopBarLayout by lazy { findViewById<HorizontalScrollView>(R.id.secondaryTopBarLayout) }
@@ -180,6 +192,7 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
     private val videoFrameRateButton by lazy { findViewById<Button>(R.id.videoFrameRateButton) }
     private val videoQualityButton by lazy { findViewById<Button>(R.id.videoQualityButton) }
     private val videoRecordingStateButton by lazy { findViewById<ImageButton>(R.id.videoRecordingStateButton) }
+    private val videoStabilizationButton by lazy { findViewById<Button>(R.id.videoStabilizationButton) }
     private val videoDynamicRangeButton by lazy { findViewById<Button>(R.id.videoDynamicRangeButton) }
     private val viewFinder by lazy { findViewById<PreviewView>(R.id.viewFinder) }
     private val viewFinderFocus by lazy { findViewById<ImageView>(R.id.viewFinderFocus) }
@@ -431,9 +444,15 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
 
         // Set secondary top bar button callbacks
         aspectRatioButton.setOnClickListener { viewModel.cyclePhotoAspectRatio() }
+        photoResolutionButton.setOnClickListener { viewModel.cyclePhotoResolutionPreset() }
         videoQualityButton.setOnClickListener { viewModel.cycleVideoQuality() }
         videoFrameRateButton.setOnClickListener { viewModel.cycleVideoFrameRate() }
+        videoStabilizationButton.setOnClickListener { viewModel.cycleVideoStabilizationMode() }
         videoDynamicRangeButton.setOnClickListener { viewModel.cycleVideoDynamicRange() }
+        proIsoButton.setOnClickListener { viewModel.cycleProIso() }
+        proShutterButton.setOnClickListener { viewModel.cycleProShutterSpeed() }
+        proWbButton.setOnClickListener { viewModel.cycleProWhiteBalance() }
+        proFocusButton.setOnClickListener { viewModel.cycleProFocusDistance() }
         effectButton.setOnClickListener { viewModel.cycleExtensionMode() }
         gridButton.setOnClickListener { viewModel.cycleGridMode() }
         timerButton.setOnClickListener { viewModel.toggleTimerMode() }
@@ -517,9 +536,10 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
 
         shutterButton.setOnClickListener {
             // Shutter animation
-            when (viewModel.cameraMode.value) {
-                CameraMode.PHOTO -> startShutterAnimation(ShutterAnimation.PhotoCapture)
-                CameraMode.VIDEO -> {
+            when {
+                viewModel.cameraMode.value.isPhotoMode ->
+                    startShutterAnimation(ShutterAnimation.PhotoCapture)
+                viewModel.cameraMode.value.isVideoMode -> {
                     if (countDownView.cancelCountDown()) {
                         viewModel.cameraState.value = CameraState.IDLE
                         startShutterAnimation(ShutterAnimation.VideoEnd)
@@ -534,9 +554,9 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
             }
 
             startTimerAndRun {
-                when (viewModel.cameraMode.value) {
-                    CameraMode.PHOTO -> viewModel.takePhoto()
-                    CameraMode.VIDEO -> viewModel.captureVideo()
+                when {
+                    viewModel.cameraMode.value.isPhotoMode -> viewModel.takePhoto()
+                    viewModel.cameraMode.value.isVideoMode -> viewModel.captureVideo()
                     else -> {}
                 }
             }
@@ -714,15 +734,19 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
 
         launch {
             viewModel.cameraMode.collectLatest { cameraMode ->
-                // Hide secondary top bar
-                secondaryTopBarLayout.isVisible = false
+                // Auto-reveal top settings bar in Pro modes, hide on standard mode switch
+                secondaryTopBarLayout.isVisible = cameraMode.isProMode
 
                 // Update secondary top bar buttons
-                aspectRatioButton.isVisible = cameraMode != CameraMode.VIDEO
-                videoQualityButton.isVisible = cameraMode == CameraMode.VIDEO
-                videoFrameRateButton.isVisible = cameraMode == CameraMode.VIDEO
-                videoDynamicRangeButton.isVisible = cameraMode == CameraMode.VIDEO
-                micButton.isVisible = cameraMode == CameraMode.VIDEO
+                aspectRatioButton.isVisible = cameraMode.isPhotoMode
+                photoResolutionButton.isVisible = cameraMode.isPhotoMode
+                videoQualityButton.isVisible = cameraMode.isVideoMode
+                videoFrameRateButton.isVisible = cameraMode.isVideoMode
+                videoDynamicRangeButton.isVisible = cameraMode.isVideoMode
+                micButton.isVisible = cameraMode.isVideoMode
+                proIsoButton.isVisible = cameraMode.isProMode
+                proShutterButton.isVisible = cameraMode.isProMode
+                proWbButton.isVisible = cameraMode.isProMode
 
                 // Update secondary bottom bar buttons
                 proButton.isVisible = cameraMode != CameraMode.QR
@@ -738,23 +762,25 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
 
         launch {
             viewModel.cameraModeTransition.collectLatest { (oldCameraMode, newCameraMode) ->
-                when (oldCameraMode) {
-                    CameraMode.PHOTO -> when (newCameraMode) {
-                        CameraMode.VIDEO -> startShutterAnimation(ShutterAnimation.PhotoToVideo)
+                when {
+                    oldCameraMode?.isPhotoMode == true -> when {
+                        newCameraMode.isVideoMode ->
+                            startShutterAnimation(ShutterAnimation.PhotoToVideo)
                         else -> startShutterAnimation(ShutterAnimation.InitPhoto)
                     }
 
-                    CameraMode.VIDEO -> when (newCameraMode) {
-                        CameraMode.PHOTO -> startShutterAnimation(ShutterAnimation.VideoToPhoto)
+                    oldCameraMode?.isVideoMode == true -> when {
+                        newCameraMode.isPhotoMode ->
+                            startShutterAnimation(ShutterAnimation.VideoToPhoto)
                         else -> startShutterAnimation(ShutterAnimation.InitVideo)
                     }
 
-                    CameraMode.QR, null -> when (newCameraMode) {
-                        CameraMode.PHOTO -> startShutterAnimation(ShutterAnimation.InitPhoto)
-
-                        CameraMode.VIDEO -> startShutterAnimation(ShutterAnimation.InitVideo)
-
-                        CameraMode.QR -> {}
+                    else -> when {
+                        newCameraMode.isPhotoMode ->
+                            startShutterAnimation(ShutterAnimation.InitPhoto)
+                        newCameraMode.isVideoMode ->
+                            startShutterAnimation(ShutterAnimation.InitVideo)
+                        else -> {}
                     }
                 }
             }
@@ -870,6 +896,12 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
                 // Update secondary bar buttons
                 timerButton.isEnabled = cameraState == CameraState.IDLE
                 aspectRatioButton.isEnabled = cameraState == CameraState.IDLE
+                photoResolutionButton.isEnabled = cameraState == CameraState.IDLE
+                videoStabilizationButton.isEnabled = cameraState == CameraState.IDLE
+                proIsoButton.isEnabled = cameraState == CameraState.IDLE
+                proShutterButton.isEnabled = cameraState == CameraState.IDLE
+                proWbButton.isEnabled = cameraState == CameraState.IDLE
+                proFocusButton.isEnabled = cameraState == CameraState.IDLE
                 effectButton.isEnabled = cameraState == CameraState.IDLE
                 settingsButton.isEnabled = cameraState == CameraState.IDLE
 
@@ -1204,29 +1236,142 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
         }
 
         launch {
-            viewModel.videoQuality.collectLatest { videoQuality ->
+            viewModel.photoResolutionPreset.collectLatest { preset ->
+                photoResolutionButton.setCompoundDrawablesWithIntrinsicBounds(
+                    0,
+                    when (preset) {
+                        PhotoResolutionPreset.FULL -> R.drawable.ic_4k
+                        PhotoResolutionPreset.QHD_PLUS_2_5K -> R.drawable.ic_2_5k
+                        PhotoResolutionPreset.QHD_2K -> R.drawable.ic_2k
+                        PhotoResolutionPreset.FHD_1080P -> R.drawable.ic_full_hd
+                    },
+                    0,
+                    0,
+                )
+                photoResolutionButton.setText(
+                    when (preset) {
+                        PhotoResolutionPreset.FULL -> R.string.photo_resolution_full
+                        PhotoResolutionPreset.QHD_PLUS_2_5K -> R.string.photo_resolution_2_5k
+                        PhotoResolutionPreset.QHD_2K -> R.string.photo_resolution_2k
+                        PhotoResolutionPreset.FHD_1080P -> R.string.photo_resolution_fhd
+                    }
+                )
+            }
+        }
+
+        launch {
+            viewModel.videoResolutionPreset.collectLatest { preset ->
                 // Update secondary bar buttons
                 videoQualityButton.setCompoundDrawablesWithIntrinsicBounds(
                     0,
-                    when (videoQuality) {
-                        Quality.SD -> R.drawable.ic_sd
-                        Quality.HD -> R.drawable.ic_hd
-                        Quality.FHD -> R.drawable.ic_full_hd
-                        Quality.UHD -> R.drawable.ic_4k
-                        else -> throw Exception("Unknown video quality $videoQuality")
+                    when (preset) {
+                        VideoResolutionPreset.SD_480P -> R.drawable.ic_sd
+                        VideoResolutionPreset.HD_720P -> R.drawable.ic_hd
+                        VideoResolutionPreset.FHD_1080P -> R.drawable.ic_full_hd
+                        VideoResolutionPreset.QHD_2K -> R.drawable.ic_2k
+                        VideoResolutionPreset.QHD_PLUS_2_5K -> R.drawable.ic_2_5k
+                        VideoResolutionPreset.UHD_4K -> R.drawable.ic_4k
                     },
                     0,
                     0
                 )
                 videoQualityButton.setText(
-                    when (videoQuality) {
-                        Quality.SD -> R.string.video_quality_sd
-                        Quality.HD -> R.string.video_quality_hd
-                        Quality.FHD -> R.string.video_quality_fhd
-                        Quality.UHD -> R.string.video_quality_uhd
-                        else -> throw Exception("Unknown video quality $videoQuality")
+                    when (preset) {
+                        VideoResolutionPreset.SD_480P -> R.string.video_quality_sd
+                        VideoResolutionPreset.HD_720P -> R.string.video_quality_hd
+                        VideoResolutionPreset.FHD_1080P -> R.string.video_quality_fhd
+                        VideoResolutionPreset.QHD_2K -> R.string.video_quality_2k
+                        VideoResolutionPreset.QHD_PLUS_2_5K -> R.string.video_quality_2_5k
+                        VideoResolutionPreset.UHD_4K -> R.string.video_quality_uhd
                     }
                 )
+            }
+        }
+
+        launch {
+            viewModel.isVideoStabilizationButtonVisible.collectLatest { isVisible ->
+                videoStabilizationButton.isVisible = isVisible
+            }
+        }
+
+        launch {
+            viewModel.videoStabilizationMode.collectLatest { mode ->
+                videoStabilizationButton.setCompoundDrawablesWithIntrinsicBounds(
+                    0,
+                    when (mode) {
+                        VideoStabilizationMode.OFF -> R.drawable.ic_video_stable_off
+                        VideoStabilizationMode.ON,
+                        VideoStabilizationMode.ON_PREVIEW,
+                        VideoStabilizationMode.OIS,
+                        VideoStabilizationMode.EIS_OIS -> R.drawable.ic_video_stable
+                    },
+                    0,
+                    0,
+                )
+                videoStabilizationButton.setText(
+                    when (mode) {
+                        VideoStabilizationMode.OFF -> R.string.video_stabilization_off
+                        VideoStabilizationMode.ON,
+                        VideoStabilizationMode.ON_PREVIEW -> R.string.video_stabilization_eis
+                        VideoStabilizationMode.OIS -> R.string.video_stabilization_ois
+                        VideoStabilizationMode.EIS_OIS -> R.string.video_stabilization_eis_ois
+                    }
+                )
+            }
+        }
+
+        launch {
+            viewModel.proIso.collectLatest { iso ->
+                proIsoButton.text = iso?.let { "ISO $it" }
+                    ?: resources.getString(R.string.pro_iso_auto)
+            }
+        }
+
+        launch {
+            viewModel.proShutterSpeedNs.collectLatest { ns ->
+                proShutterButton.text = when (ns) {
+                    null -> resources.getString(R.string.pro_shutter_auto)
+                    250_000L -> "1/4000s"
+                    1_000_000L -> "1/1000s"
+                    2_000_000L -> "1/500s"
+                    4_000_000L -> "1/250s"
+                    8_000_000L -> "1/125s"
+                    16_666_666L -> "1/60s"
+                    33_333_333L -> "1/30s"
+                    66_666_666L -> "1/15s"
+                    250_000_000L -> "1/4s"
+                    500_000_000L -> "1/2s"
+                    1_000_000_000L -> "1s"
+                    else -> "${(1_000_000_000L / ns.coerceAtLeast(1L))}s"
+                }
+            }
+        }
+
+        launch {
+            viewModel.proWhiteBalance.collectLatest { wb ->
+                proWbButton.text = when (wb) {
+                    ProWhiteBalanceMode.AUTO -> resources.getString(R.string.pro_wb_auto)
+                    else -> wb.label
+                }
+            }
+        }
+
+        launch {
+            viewModel.isProFocusVisible.collectLatest { isVisible ->
+                proFocusButton.isVisible = isVisible
+            }
+        }
+
+        launch {
+            viewModel.proFocusDistance.collectLatest { dist ->
+                proFocusButton.text = when (dist) {
+                    null -> resources.getString(R.string.pro_focus_auto)
+                    0f -> "∞"
+                    0.5f -> "2.0m"
+                    2.0f -> "0.5m"
+                    4.0f -> "0.25m"
+                    else -> resources.getString(R.string.pro_focus_macro)
+                }
             }
         }
 
@@ -1394,7 +1539,7 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
                 screenFlashView.setScreenFlashWindow(window)
 
                 val videoRecordingAvailable = viewModel.isVideoRecordingAvailable()
-                if (viewModel.initialCameraMode == CameraMode.VIDEO && !videoRecordingAvailable) {
+                if (viewModel.initialCameraMode.isVideoMode && !videoRecordingAvailable) {
                     // If an app asked for a video we have to bail out
                     if (viewModel.inSingleCaptureMode.value) {
                         Toast.makeText(
@@ -1519,22 +1664,40 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
                     PhotoOutputFormat.RAW_JPEG -> ImageCapture.OUTPUT_FORMAT_RAW_JPEG
                 }
 
+                val resolutionSelectorBuilder = ResolutionSelector.Builder()
+                    .setAspectRatioStrategy(
+                        AspectRatioStrategy(
+                            cameraConfiguration.photoAspectRatio,
+                            AspectRatioStrategy.FALLBACK_RULE_AUTO,
+                        )
+                    )
+                    .setAllowedResolutionMode(
+                        if (
+                            cameraConfiguration.enableHighResolution &&
+                            cameraConfiguration.photoResolutionPreset == PhotoResolutionPreset.FULL
+                        ) {
+                            ResolutionSelector.PREFER_HIGHER_RESOLUTION_OVER_CAPTURE_RATE
+                        } else {
+                            ResolutionSelector.PREFER_CAPTURE_RATE_OVER_HIGHER_RESOLUTION
+                        }
+                    )
+
+                if (cameraConfiguration.photoResolutionPreset != PhotoResolutionPreset.FULL) {
+                    val longEdge = cameraConfiguration.photoResolutionPreset.maxLongEdge
+                    val shortEdge = when (cameraConfiguration.photoAspectRatio) {
+                        AspectRatio.RATIO_16_9 -> (longEdge * 9) / 16
+                        else -> (longEdge * 3) / 4
+                    }
+                    resolutionSelectorBuilder.setResolutionStrategy(
+                        ResolutionStrategy(
+                            Size(longEdge, shortEdge),
+                            ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+                        )
+                    )
+                }
+
                 viewModel.cameraController.imageCaptureResolutionSelector =
-                    ResolutionSelector.Builder()
-                        .setAspectRatioStrategy(
-                            AspectRatioStrategy(
-                                cameraConfiguration.photoAspectRatio,
-                                AspectRatioStrategy.FALLBACK_RULE_AUTO,
-                            )
-                        )
-                        .setAllowedResolutionMode(
-                            if (cameraConfiguration.enableHighResolution) {
-                                ResolutionSelector.PREFER_HIGHER_RESOLUTION_OVER_CAPTURE_RATE
-                            } else {
-                                ResolutionSelector.PREFER_CAPTURE_RATE_OVER_HIGHER_RESOLUTION
-                            }
-                        )
-                        .build()
+                    resolutionSelectorBuilder.build()
 
                 CameraController.IMAGE_CAPTURE
             }
@@ -1561,7 +1724,7 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
                     "Video dynamic range not supported with the requested video quality"
                 }
 
-                // Set the quality
+                // Set the quality and target encoding bitrate for 2K / 2.5K presets
                 viewModel.cameraController.videoCaptureQualitySelector =
                     QualitySelector.from(cameraConfiguration.videoQuality)
 
@@ -1581,6 +1744,10 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
                             else -> MirrorMode.MIRROR_MODE_OFF
                         }
                     }
+
+                viewModel.cameraController.applyVideoResolutionPreset(
+                    cameraConfiguration.videoResolutionPreset
+                )
 
                 CameraController.VIDEO_CAPTURE
             }
@@ -1635,16 +1802,12 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
                 )
                 .setVideoStabilizationMode(
                     when (cameraConfiguration) {
-                        is CameraConfiguration.Video -> when (
-                            cameraConfiguration.enableVideoStabilization
-                        ) {
-                            true -> VideoStabilizationMode.getMode(cameraConfiguration.camera)
-                            false -> null
-                        }
-
-                        else -> null
-                    } ?: VideoStabilizationMode.OFF
+                        is CameraConfiguration.Video -> cameraConfiguration.videoStabilizationMode
+                        else -> VideoStabilizationMode.OFF
+                    },
+                    cameraConfiguration.camera,
                 )
+                .setProManualOptions(camera2Options, cameraConfiguration.camera)
                 .setEdgeMode(camera2Options.edgeMode)
                 .setNoiseReductionMode(camera2Options.noiseReductionMode)
                 .setShadingMode(camera2Options.shadingMode)
@@ -1658,8 +1821,17 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
         // Restore settings that can be set on the fly
         viewModel.setVideoMicrophoneEnabled(viewModel.videoMicMode.value)
 
-        // Reset exposure level
-        viewModel.setExposureCompensationLevel(0.5f)
+        // Reset exposure level (slightly boosted in Night mode when hardware Night extension isn't active)
+        viewModel.setExposureCompensationLevel(
+            if (
+                cameraConfiguration.cameraMode == CameraMode.NIGHT &&
+                cameraConfiguration.extensionMode != ExtensionMode.NIGHT
+            ) {
+                0.65f
+            } else {
+                0.5f
+            }
+        )
     }
 
     private fun updateGalleryButton(uri: Uri?, fromCapture: Boolean) {
@@ -1959,7 +2131,7 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
 
         when (gestureAction) {
             GestureAction.SHUTTER -> {
-                if (viewModel.cameraMode.value == CameraMode.VIDEO
+                if (viewModel.cameraMode.value.isVideoMode
                     && viewModel.isShutterButtonEnabled.value
                     && event?.repeatCount == 0
                 ) {
@@ -1977,7 +2149,7 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
             }
 
             GestureAction.MIC_MUTE -> {
-                if (viewModel.cameraMode.value == CameraMode.VIDEO && micButton.isEnabled &&
+                if (viewModel.cameraMode.value.isVideoMode && micButton.isEnabled &&
                     event?.repeatCount == 0
                 ) {
                     viewModel.toggleVideoMicrophoneEnabled()
