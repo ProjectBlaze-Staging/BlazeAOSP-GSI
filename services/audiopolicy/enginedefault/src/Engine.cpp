@@ -26,6 +26,7 @@
 
 #include "Engine.h"
 #include <android-base/macros.h>
+#include <cutils/properties.h>
 #include <AudioPolicyManagerObserver.h>
 #include <PolicyAudioPort.h>
 #include <IOProfile.h>
@@ -709,12 +710,24 @@ sp<DeviceDescriptor> Engine::getDeviceForInputSource(audio_source_t inputSource)
                 AUDIO_DEVICE_IN_USB_HEADSET, AUDIO_DEVICE_IN_USB_DEVICE,
                 AUDIO_DEVICE_IN_BUILTIN_MIC});
         break;
-    case AUDIO_SOURCE_CAMCORDER:
-        // For a device without built-in mic, adding usb device
-        device = availableDevices.getFirstExistingDevice({
-                AUDIO_DEVICE_IN_BACK_MIC, AUDIO_DEVICE_IN_BUILTIN_MIC,
-                AUDIO_DEVICE_IN_USB_DEVICE});
+    case AUDIO_SOURCE_CAMCORDER: {
+        char brand[PROPERTY_VALUE_MAX] = {0};
+        property_get("ro.product.vendor.brand", brand, "");
+        if (strcasecmp(brand, "samsung") == 0 ||
+                property_get_bool("persist.sys.phh.samsung_camcorder_mic", false)) {
+            device = availableDevices.getFirstExistingDevice({
+                    AUDIO_DEVICE_IN_WIRED_HEADSET,
+                    AUDIO_DEVICE_IN_USB_HEADSET, AUDIO_DEVICE_IN_USB_DEVICE,
+                    AUDIO_DEVICE_IN_BLUETOOTH_BLE, AUDIO_DEVICE_IN_BUILTIN_MIC,
+                    AUDIO_DEVICE_IN_BACK_MIC});
+        } else {
+            // For a device without built-in mic, adding usb device
+            device = availableDevices.getFirstExistingDevice({
+                    AUDIO_DEVICE_IN_BACK_MIC, AUDIO_DEVICE_IN_BUILTIN_MIC,
+                    AUDIO_DEVICE_IN_USB_DEVICE});
+        }
         break;
+    }
     case AUDIO_SOURCE_VOICE_DOWNLINK:
     case AUDIO_SOURCE_VOICE_CALL:
     case AUDIO_SOURCE_VOICE_UPLINK:

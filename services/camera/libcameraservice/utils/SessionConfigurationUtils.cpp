@@ -1333,13 +1333,46 @@ status_t mapRequestTemplateToAidl(camera_request_template_t templateId,
     return OK;
 }
 
+static void setVendorTagIntOrByte(CameraMetadata& meta, sp<VendorTagDescriptor> vTags,
+        const char* tagName, int32_t value) {
+    if (vTags == nullptr) return;
+    uint32_t tag = 0;
+    if (CameraMetadata::getTagFromName(tagName, vTags.get(), &tag) != OK) {
+        return;
+    }
+    if (meta.exists(tag)) {
+        return;
+    }
+    int tagType = vTags->getTagType(tag);
+    if (tagType == TYPE_INT32) {
+        int32_t v = value;
+        meta.update(tag, &v, 1);
+    } else if (tagType == TYPE_BYTE) {
+        uint8_t v = static_cast<uint8_t>(value);
+        meta.update(tag, &v, 1);
+    }
+}
+
+static sp<VendorTagDescriptor> resolveVendorTagDescriptor(metadata_vendor_id_t vendorTagId) {
+    sp<VendorTagDescriptor> vTags = VendorTagDescriptor::getGlobalVendorTagDescriptor();
+    if ((vTags == nullptr || vTags->getTagCount() <= 0) &&
+            vendorTagId != CAMERA_METADATA_INVALID_VENDOR_ID) {
+        sp<VendorTagDescriptorCache> cache =
+                VendorTagDescriptorCache::getGlobalVendorTagCache();
+        if (cache != nullptr) {
+            cache->getVendorTagDescriptor(vendorTagId, &vTags);
+        }
+    }
+    return vTags;
+}
+
 void filterParameters(const CameraMetadata& src, const CameraMetadata& deviceInfo,
         const std::vector<int32_t>& additionalTags, metadata_vendor_id_t vendorTagId,
         CameraMetadata& dst) {
     const CameraMetadata params(src);
     camera_metadata_ro_entry_t availableSessionKeys = deviceInfo.find(
             ANDROID_REQUEST_AVAILABLE_SESSION_KEYS);
-    CameraMetadata filteredParams(availableSessionKeys.count);
+    CameraMetadata filteredParams(availableSessionKeys.count + 8);
     camera_metadata_t *meta = const_cast<camera_metadata_t *>(
             filteredParams.getAndLock());
     set_camera_metadata_vendor_id(meta, vendorTagId);
@@ -1354,6 +1387,25 @@ void filterParameters(const CameraMetadata& src, const CameraMetadata& deviceInf
             filteredParams.update(entry);
         }
     }
+
+    // Universal Vendor Tag Bridge (Samsung & Qualcomm CamX)
+    sp<VendorTagDescriptor> vTags = resolveVendorTagDescriptor(vendorTagId);
+    if (vTags != nullptr) {
+        // 1. Samsung Privileged Camera Client Index (unlocks 60fps, OIS+EIS fusion, HDR)
+        setVendorTagIntOrByte(filteredParams, vTags,
+                "samsung.android.control.cameraClientIndex", 1);
+
+        // 2. Qualcomm CamX EISv3 session parameter when stabilization is enabled
+        camera_metadata_ro_entry stabEntry = params.find(ANDROID_CONTROL_VIDEO_STABILIZATION_MODE);
+        if (stabEntry.count > 0 && stabEntry.data.u8[0] !=
+                ANDROID_CONTROL_VIDEO_STABILIZATION_MODE_OFF) {
+            setVendorTagIntOrByte(filteredParams, vTags,
+                    "org.quic.camera.eis3enable.EISV3Enable", 1);
+            setVendorTagIntOrByte(filteredParams, vTags,
+                    "org.codeaurora.qcamera3.eis3.enable", 1);
+        }
+    }
+
     dst = std::move(filteredParams);
 }
 
@@ -1375,6 +1427,20 @@ status_t overrideDefaultRequestKeys(CameraMetadata *request) {
     if (!request->exists(ANDROID_CONTROL_AUTOFRAMING)) {
         static const uint8_t kDefaultAutoframingMode = ANDROID_CONTROL_AUTOFRAMING_OFF;
         request->update(ANDROID_CONTROL_AUTOFRAMING, &kDefaultAutoframingMode, 1);
+    }
+
+    // Inject Universal Vendor Tags into default request templates
+    const camera_metadata_t* rawMeta = request->getAndLock();
+    metadata_vendor_id_t vendorTagId = (rawMeta != nullptr)
+            ? get_camera_metadata_vendor_id(rawMeta)
+            : CAMERA_METADATA_INVALID_VENDOR_ID;
+    request->unlock(rawMeta);
+    sp<VendorTagDescriptor> vTags = resolveVendorTagDescriptor(vendorTagId);
+    if (vTags != nullptr) {
+        setVendorTagIntOrByte(*request, vTags,
+                "samsung.android.control.cameraClientIndex", 1);
+        setVendorTagIntOrByte(*request, vTags,
+                "org.quic.camera.CustomNoiseReduction.CustomNoiseReduction", 1);
     }
 
     return OK;

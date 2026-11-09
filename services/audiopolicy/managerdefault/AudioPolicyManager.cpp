@@ -46,6 +46,7 @@
 #include <com_android_media_audio.h>
 #include <com_android_media_audioserver.h>
 #include <cutils/bitops.h>
+#include <cutils/properties.h>
 #include <error/expected_utils.h>
 #include <media/AudioParameter.h>
 #include <policy.h>
@@ -3199,6 +3200,15 @@ AudioPolicyManager::getInputForAttr(audio_attributes_t attributes_,
 
     if (attributes_.source == AUDIO_SOURCE_DEFAULT) {
         attributes_.source = AUDIO_SOURCE_MIC;
+    } else if (attributes_.source == AUDIO_SOURCE_CAMCORDER) {
+        char brand[PROPERTY_VALUE_MAX] = {0};
+        property_get("ro.product.vendor.brand", brand, "");
+        if (strcasecmp(brand, "samsung") == 0 ||
+                property_get_bool("persist.sys.phh.samsung_camcorder_mic", false)) {
+            attributes_.source = AUDIO_SOURCE_MIC;
+            attributes_.flags = static_cast<audio_flags_mask_t>(
+                    attributes_.flags | AUDIO_FLAG_NONE);
+        }
     }
 
     const auto& attributes = attributes_;

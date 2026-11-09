@@ -1393,11 +1393,23 @@ Vector<audio_decoder> MediaProfiles::getAudioDecoders() const
 int MediaProfiles::getCamcorderProfileIndex(int cameraId, camcorder_quality quality) const
 {
     int index = -1;
+    bool hasCameraId = false;
     for (size_t i = 0, n = mCamcorderProfiles.size(); i < n; ++i) {
-        if (mCamcorderProfiles[i]->mCameraId == cameraId &&
-            mCamcorderProfiles[i]->mQuality == quality) {
-            index = i;
-            break;
+        if (mCamcorderProfiles[i]->mCameraId == cameraId) {
+            hasCameraId = true;
+            if (mCamcorderProfiles[i]->mQuality == quality) {
+                index = i;
+                break;
+            }
+        }
+    }
+    if (index == -1 && !hasCameraId && cameraId > 0) {
+        for (size_t i = 0, n = mCamcorderProfiles.size(); i < n; ++i) {
+            if (mCamcorderProfiles[i]->mCameraId == 0 &&
+                mCamcorderProfiles[i]->mQuality == quality) {
+                index = i;
+                break;
+            }
         }
     }
     return index;
