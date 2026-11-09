@@ -7,6 +7,8 @@ package org.lineageos.aperture.repositories
 
 import android.Manifest
 import android.content.Context
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraMetadata
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.CameraInfo
@@ -122,17 +124,30 @@ class CameraRepository(
                 val isIgnoredAuxCamera = overlaysRepository.ignoredAuxCameraIds.contains(
                     camera2CameraInfo.cameraId
                 )
+                val capabilities = camera2CameraInfo.getCameraCharacteristic(
+                    CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES
+                ) ?: IntArray(0)
+                val isLogicalCamera = physicalCameraInfos.size > 1 ||
+                        capabilities.contains(
+                            CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA
+                        )
                 val isIgnoredLogicalCamera = overlaysRepository.ignoreLogicalAuxCameras
-                        && physicalCameraInfos.size > 1
+                        && isLogicalCamera
+                val isDuplicateMainZoomAux = intrinsicZoomRatio in 0.85f..1.35f
 
                 overlaysRepository.enableAuxCameras
                         && !isIgnoredAuxCamera
                         && !isIgnoredLogicalCamera
+                        && !isDuplicateMainZoomAux
             }
         }
     }
 
-    private fun List<CameraInfo>.mapToCamera() = map { it.toCamera() }.sortedBy { it.cameraId }
+    private fun List<CameraInfo>.mapToCamera() = map { it.toCamera() }
+        .sortedWith(compareBy({ it.cameraId.toIntOrNull() ?: Int.MAX_VALUE }, { it.cameraId }))
+        .distinctBy {
+            it.cameraFacing to kotlin.math.round(it.intrinsicZoomRatio * 10f).toInt()
+        }
 
     private fun CameraInfo.toCamera() = Camera.fromCameraX(
         this,

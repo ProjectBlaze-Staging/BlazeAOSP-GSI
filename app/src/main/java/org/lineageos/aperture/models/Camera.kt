@@ -72,6 +72,12 @@ class Camera private constructor(
 
     val intrinsicZoomRatio = cameraInfo.intrinsicZoomRatio
 
+    /**
+     * Whether this camera is a back-facing telephoto lens that supports 30x Space Zoom.
+     */
+    val supportsSpaceZoom: Boolean =
+        cameraFacing == CameraFacing.BACK && intrinsicZoomRatio >= 1.5f
+
     private val imageCaptureCapabilities = ImageCapture.getImageCaptureCapabilities(cameraInfo)
 
     val supportedPhotoOutputFormats = imageCaptureCapabilities.supportedOutputFormats.map {
@@ -327,6 +333,8 @@ class Camera private constructor(
     }.toSet()
 
     companion object {
+        const val MAX_SPACE_ZOOM_RATIO = 30.0f
+
         fun fromCameraX(
             cameraXCameraInfo: CameraInfo,
             extensionsManager: ExtensionsManager,

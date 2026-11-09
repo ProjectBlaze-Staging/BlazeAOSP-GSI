@@ -252,7 +252,7 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
                 }
 
                 is ZoomGestureDetector.ZoomEvent.Move -> {
-                    viewModel.cameraController.onPinchToZoom(it.incrementalScaleFactor)
+                    viewModel.onPinchToZoom(it.incrementalScaleFactor)
                     handler.removeMessages(MSG_ON_PINCH_TO_ZOOM)
                     handler.sendMessageDelayed(handler.obtainMessage(MSG_ON_PINCH_TO_ZOOM), 500)
                 }
@@ -513,10 +513,10 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
         }
 
         zoomLevel.onProgressChangedByUser = {
-            viewModel.cameraController.setLinearZoom(it)
+            viewModel.setEffectiveLinearZoom(it)
         }
         zoomLevel.textFormatter = {
-            "%.1fx".format(viewModel.zoomState.value?.zoomRatio)
+            "%.1fx".format(viewModel.getEffectiveZoomRatio())
         }
 
         // Set expose level callback & text formatter
@@ -1122,14 +1122,40 @@ open class CameraActivity : AppCompatActivity(R.layout.activity_camera) {
 
         launch {
             viewModel.zoomState.collectLatest { zoomState ->
-                zoomState?.takeIf { it.minZoomRatio != it.maxZoomRatio }?.let {
-                    zoomLevel.progress = it.linearZoom
+                zoomState?.takeIf {
+                    it.minZoomRatio != viewModel.getMaxEffectiveZoomRatio()
+                }?.let {
+                    zoomLevel.progress = viewModel.getEffectiveLinearZoom()
                     zoomLevel.isVisible = true
 
                     handler.removeMessages(MSG_HIDE_ZOOM_SLIDER)
                     handler.sendMessageDelayed(handler.obtainMessage(MSG_HIDE_ZOOM_SLIDER), 2000)
 
-                    lensSelectorLayout.onZoomRatioChanged(it.zoomRatio)
+                    lensSelectorLayout.onZoomRatioChanged(viewModel.getEffectiveZoomRatio())
+                }
+            }
+        }
+
+        launch {
+            viewModel.spaceZoomExtraMultiplier.collectLatest { extraZoom ->
+                for (i in 0 until viewFinder.childCount) {
+                    val child = viewFinder.getChildAt(i)
+                    child.scaleX = extraZoom
+                    child.scaleY = extraZoom
+                }
+                viewModel.zoomState.value?.takeIf {
+                    it.minZoomRatio != viewModel.getMaxEffectiveZoomRatio()
+                }?.let {
+                    zoomLevel.progress = viewModel.getEffectiveLinearZoom()
+                    if (extraZoom > 1.001f) {
+                        zoomLevel.isVisible = true
+                        handler.removeMessages(MSG_HIDE_ZOOM_SLIDER)
+                        handler.sendMessageDelayed(
+                            handler.obtainMessage(MSG_HIDE_ZOOM_SLIDER),
+                            2000
+                        )
+                    }
+                    lensSelectorLayout.onZoomRatioChanged(viewModel.getEffectiveZoomRatio())
                 }
             }
         }

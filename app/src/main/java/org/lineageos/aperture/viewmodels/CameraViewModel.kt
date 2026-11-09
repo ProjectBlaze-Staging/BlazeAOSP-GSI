@@ -503,6 +503,12 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
             initialValue = null
         )
 
+    /**
+     * Additional software/hybrid zoom multiplier beyond the HAL's maxZoomRatio
+     * when Telephoto 30x Space Zoom is active.
+     */
+    val spaceZoomExtraMultiplier = MutableStateFlow(1.0f)
+
     val tapToFocusInfoState = cameraController.tapToFocusInfoState.asFlow()
         .flowOn(Dispatchers.IO)
         .shareIn(
@@ -1226,15 +1232,16 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
                 )
 
                 val targetMaxEdge = photoResolutionPreset.value.maxLongEdge
+                val extraZoom = spaceZoomExtraMultiplier.value
                 if (
-                    targetMaxEdge > 0 &&
+                    (targetMaxEdge > 0 || extraZoom > 1.01f) &&
                     (imageOutputFormat == ImageCapture.OUTPUT_FORMAT_JPEG ||
                         imageOutputFormat == ImageCapture.OUTPUT_FORMAT_JPEG_ULTRA_HDR ||
                         (imageOutputFormat == ImageCapture.OUTPUT_FORMAT_RAW_JPEG &&
                             output.imageFormat !in RAW_FORMATS))
                 ) {
                     output.savedUri?.let { savedUri ->
-                        downscaleSavedJpegUriIfNeeded(savedUri, targetMaxEdge)
+                        downscaleSavedJpegUriIfNeeded(savedUri, targetMaxEdge, extraZoom)
                     }
                 }
 
@@ -1831,6 +1838,74 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
         this.exposureCompensationLevel.value = exposureCompensationLevel
     }
 
+    fun getMaxEffectiveZoomRatio(): Float {
+        val hwMax = zoomState.value?.maxZoomRatio ?: 1f
+        return if (_cameraConfiguration.value?.camera?.supportsSpaceZoom == true) {
+            maxOf(hwMax, Camera.MAX_SPACE_ZOOM_RATIO)
+        } else {
+            hwMax
+        }
+    }
+
+    fun getEffectiveZoomRatio(): Float {
+        val hwZoom = zoomState.value?.zoomRatio ?: 1f
+        return hwZoom * spaceZoomExtraMultiplier.value
+    }
+
+    fun getEffectiveLinearZoom(): Float {
+        val zs = zoomState.value ?: return 0f
+        if (_cameraConfiguration.value?.camera?.supportsSpaceZoom != true) {
+            return zs.linearZoom
+        }
+        val minZ = zs.minZoomRatio
+        val maxZ = maxOf(zs.maxZoomRatio, Camera.MAX_SPACE_ZOOM_RATIO)
+        if (maxZ <= minZ) return 0f
+        return ((getEffectiveZoomRatio() - minZ) / (maxZ - minZ)).coerceIn(0f, 1f)
+    }
+
+    fun setEffectiveZoomRatio(targetZoomRatio: Float) {
+        val zs = zoomState.value ?: return
+        val minZ = zs.minZoomRatio
+        val hwMax = zs.maxZoomRatio
+        val maxZ = getMaxEffectiveZoomRatio()
+        val clamped = targetZoomRatio.coerceIn(minZ, maxZ)
+        if (clamped <= hwMax || _cameraConfiguration.value?.camera?.supportsSpaceZoom != true) {
+            spaceZoomExtraMultiplier.value = 1.0f
+            cameraController.setZoomRatio(clamped.coerceIn(minZ, hwMax))
+        } else {
+            cameraController.setZoomRatio(hwMax)
+            spaceZoomExtraMultiplier.value = (clamped / hwMax).coerceIn(1.0f, maxZ / hwMax)
+        }
+    }
+
+    fun setEffectiveLinearZoom(linearZoom: Float) {
+        val zs = zoomState.value ?: return
+        val clampedLinear = linearZoom.coerceIn(0f, 1f)
+        if (_cameraConfiguration.value?.camera?.supportsSpaceZoom != true) {
+            spaceZoomExtraMultiplier.value = 1.0f
+            cameraController.setLinearZoom(clampedLinear)
+            return
+        }
+        val minZ = zs.minZoomRatio
+        val maxZ = maxOf(zs.maxZoomRatio, Camera.MAX_SPACE_ZOOM_RATIO)
+        val targetZoom = minZ + clampedLinear * (maxZ - minZ)
+        setEffectiveZoomRatio(targetZoom)
+    }
+
+    fun onPinchToZoom(scaleFactor: Float) {
+        if (_cameraConfiguration.value?.camera?.supportsSpaceZoom != true) {
+            spaceZoomExtraMultiplier.value = 1.0f
+            cameraController.onPinchToZoom(scaleFactor)
+            return
+        }
+        val speedUp = if (scaleFactor > 1f) {
+            1.0f + (scaleFactor - 1.0f) * 2.0f
+        } else {
+            1.0f - (1.0f - scaleFactor) * 2.0f
+        }
+        setEffectiveZoomRatio(getEffectiveZoomRatio() * speedUp)
+    }
+
     /**
      * Apply the specified zoom smoothly. The value will be automatically clamped
      * between min and max.
@@ -1842,14 +1917,17 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
             return
         }
 
-        val zoomState = zoomState.value ?: return
+        val zoomState = zoomState.value ?: run {
+            zoomGestureMutex.unlock()
+            return
+        }
 
         ValueAnimator.ofFloat(
-            zoomState.zoomRatio,
-            zoomRatio.coerceIn(zoomState.minZoomRatio, zoomState.maxZoomRatio)
+            getEffectiveZoomRatio(),
+            zoomRatio.coerceIn(zoomState.minZoomRatio, getMaxEffectiveZoomRatio())
         ).apply {
             addUpdateListener {
-                cameraController.setZoomRatio(it.animatedValue as Float)
+                setEffectiveZoomRatio(it.animatedValue as Float)
             }
             addListener(
                 onEnd = {
@@ -1867,16 +1945,12 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
     /**
      * Zoom in by a power of 2.
      */
-    fun zoomIn() = zoomState.value?.zoomRatio?.let {
-        smoothZoom(it.nextPowerOfTwo())
-    }
+    fun zoomIn() = smoothZoom(getEffectiveZoomRatio().nextPowerOfTwo())
 
     /**
      * Zoom out by a power of 2.
      */
-    fun zoomOut() = zoomState.value?.zoomRatio?.let {
-        smoothZoom(it.previousPowerOfTwo())
-    }
+    fun zoomOut() = smoothZoom(getEffectiveZoomRatio().previousPowerOfTwo())
 
     fun setSaveLocation(saveLocation: Boolean?) {
         preferencesRepository.saveLocation.value = saveLocation
@@ -1939,7 +2013,9 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
     private fun createInitialCameraConfiguration(
         camera: Camera,
         cameraMode: CameraMode,
-    ) = when (cameraMode) {
+    ): CameraConfiguration {
+        spaceZoomExtraMultiplier.value = 1.0f
+        return when (cameraMode) {
         CameraMode.PHOTO,
         CameraMode.NIGHT,
         CameraMode.PRO_PHOTO -> {
@@ -2043,14 +2119,14 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
             val savedPreset = preferencesRepository.videoResolutionPreset.value
             val videoResolutionPreset = savedPreset.takeIf {
                 camera.supportedVideoResolutionPresets.contains(it)
-            } ?: camera.supportedVideoResolutionPresets.firstOrNull {
+            } ?: camera.supportedVideoResolutionPresets.lastOrNull {
                 it.underlyingQuality == preferencesRepository.videoQuality.value
-            } ?: camera.supportedVideoResolutionPresets.firstOrNull()
+            } ?: camera.supportedVideoResolutionPresets.lastOrNull()
                 ?: VideoResolutionPreset.FHD_1080P
 
             val videoQuality = videoResolutionPreset.underlyingQuality.takeIf {
                 camera.supportedVideoQualities.contains(it)
-            } ?: camera.supportedVideoQualities.keys.firstOrNull() ?: error(
+            } ?: camera.supportedVideoQualities.keys.lastOrNull() ?: error(
                 "Camera ${camera.cameraId} does not support any video quality"
             )
 
@@ -2108,8 +2184,13 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
             camera = camera,
         )
     }
+    }
 
-    private fun downscaleSavedJpegUriIfNeeded(uri: Uri, maxLongEdge: Int) {
+    private fun downscaleSavedJpegUriIfNeeded(
+        uri: Uri,
+        maxLongEdge: Int,
+        spaceZoomExtra: Float = 1.0f,
+    ) {
         runCatching {
             val cr = applicationContext.contentResolver
             val exifTags = mutableMapOf<String, String>()
@@ -2136,30 +2217,51 @@ class CameraViewModel(application: Application) : ApertureViewModel(application)
                     exif.getAttribute(tag)?.let { exifTags[tag] = it }
                 }
             }
-            val original = cr.openInputStream(uri)?.use { input ->
+            var workingBitmap = cr.openInputStream(uri)?.use { input ->
                 BitmapFactory.decodeStream(input)
             } ?: return@runCatching
 
-            val width = original.width
-            val height = original.height
-            val longEdge = maxOf(width, height)
-            if (longEdge <= maxLongEdge) {
-                original.recycle()
-                return@runCatching
+            val origWidth = workingBitmap.width
+            val origHeight = workingBitmap.height
+
+            if (spaceZoomExtra > 1.01f) {
+                val cropW = (origWidth / spaceZoomExtra).toInt().coerceIn(1, origWidth)
+                val cropH = (origHeight / spaceZoomExtra).toInt().coerceIn(1, origHeight)
+                val cropX = ((origWidth - cropW) / 2).coerceAtLeast(0)
+                val cropY = ((origHeight - cropH) / 2).coerceAtLeast(0)
+                val cropped = Bitmap.createBitmap(workingBitmap, cropX, cropY, cropW, cropH)
+                if (cropped !== workingBitmap) {
+                    workingBitmap.recycle()
+                }
+                val upscaled = Bitmap.createScaledBitmap(cropped, origWidth, origHeight, true)
+                if (upscaled !== cropped) {
+                    cropped.recycle()
+                }
+                workingBitmap = upscaled
             }
 
-            val scale = maxLongEdge.toFloat() / longEdge.toFloat()
-            val targetWidth = (width * scale).toInt().coerceAtLeast(1)
-            val targetHeight = (height * scale).toInt().coerceAtLeast(1)
-            val scaled = Bitmap.createScaledBitmap(original, targetWidth, targetHeight, true)
-            if (scaled !== original) {
-                original.recycle()
+            val width = workingBitmap.width
+            val height = workingBitmap.height
+            val longEdge = maxOf(width, height)
+            val finalBitmap = if (maxLongEdge > 0 && longEdge > maxLongEdge) {
+                val scale = maxLongEdge.toFloat() / longEdge.toFloat()
+                val targetWidth = (width * scale).toInt().coerceAtLeast(1)
+                val targetHeight = (height * scale).toInt().coerceAtLeast(1)
+                val scaled = Bitmap.createScaledBitmap(
+                    workingBitmap, targetWidth, targetHeight, true
+                )
+                if (scaled !== workingBitmap) {
+                    workingBitmap.recycle()
+                }
+                scaled
+            } else {
+                workingBitmap
             }
 
             cr.openOutputStream(uri, "wt")?.use { out ->
-                scaled.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                finalBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
             }
-            scaled.recycle()
+            finalBitmap.recycle()
 
             cr.openFileDescriptor(uri, "rw")?.use { pfd ->
                 val exifOut = ExifInterface(pfd.fileDescriptor)

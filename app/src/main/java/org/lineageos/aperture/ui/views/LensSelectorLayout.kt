@@ -75,7 +75,7 @@ class LensSelectorLayout @JvmOverloads constructor(
             for (camera in availableCameras.sortedBy { it.intrinsicZoomRatio }) {
                 val button = inflateButton().apply {
                     setOnClickListener {
-                        if (!isSelected) {
+                        if (camera != activeCamera) {
                             buttonToCamera[it]?.let(onCameraChangeCallback)
                         } else {
                             onResetZoomRatioCallback()
@@ -87,6 +87,25 @@ class LensSelectorLayout @JvmOverloads constructor(
                 addView(button)
                 buttonToCamera[button] = camera
                 buttonToApproximateZoomRatio[button] = camera.intrinsicZoomRatio
+            }
+
+            if (activeCamera.supportsSpaceZoom) {
+                for (spaceZoomPreset in SPACE_ZOOM_PRESETS) {
+                    val button = inflateButton().apply {
+                        setOnClickListener {
+                            if (!isSelected) {
+                                buttonToZoomRatio[it]?.let(onZoomRatioChangeCallback)
+                            } else {
+                                onResetZoomRatioCallback()
+                            }
+                        }
+                        text = formatZoomRatio(spaceZoomPreset)
+                    }
+
+                    addView(button)
+                    buttonToZoomRatio[button] = spaceZoomPreset
+                    buttonToApproximateZoomRatio[button] = spaceZoomPreset
+                }
             }
         }
 
@@ -124,6 +143,9 @@ class LensSelectorLayout @JvmOverloads constructor(
     }
 
     private fun updateButtonsAttributes() {
+        if (!::activeCamera.isInitialized) {
+            return
+        }
         if (usesLogicalZoomRatio) {
             buttonToZoomRatio.asSequence().let {
                 val firstButton = it.first().key
@@ -146,8 +168,23 @@ class LensSelectorLayout @JvmOverloads constructor(
                 }
             }
         } else {
+            var activeSpaceZoomButton: Button? = null
+            if (activeCamera.supportsSpaceZoom && buttonToZoomRatio.isNotEmpty()) {
+                for ((button, exactZoomRatio) in buttonToZoomRatio) {
+                    if (currentZoomRatio >= exactZoomRatio - 0.2f) {
+                        activeSpaceZoomButton = button
+                    }
+                }
+            }
+
             for ((button, camera) in buttonToCamera) {
-                updateButtonAttributes(button, camera == activeCamera)
+                updateButtonAttributes(
+                    button,
+                    camera == activeCamera && activeSpaceZoomButton == null
+                )
+            }
+            for ((button, _) in buttonToZoomRatio) {
+                updateButtonAttributes(button, button == activeSpaceZoomButton)
             }
         }
     }
@@ -176,5 +213,7 @@ class LensSelectorLayout @JvmOverloads constructor(
 
         private val ZOOM_RATIO_FORMATTER = DecimalFormat("0.#", DECIMAL_FORMAT_SYMBOLS)
         private val ZOOM_RATIO_FORMATTER_SUB_ONE = DecimalFormat(".#", DECIMAL_FORMAT_SYMBOLS)
+
+        private val SPACE_ZOOM_PRESETS = listOf(4f, 10f, 30f)
     }
 }
