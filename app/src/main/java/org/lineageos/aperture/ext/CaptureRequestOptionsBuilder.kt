@@ -35,10 +35,36 @@ fun CaptureRequestOptions.Builder.setFrameRate(
 } ?: clearCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE)
 
 @OptIn(ExperimentalCamera2Interop::class)
+private fun <T : Any> CaptureRequestOptions.Builder.trySetVendorKey(
+    name: String,
+    type: Class<T>,
+    value: T,
+) {
+    runCatching {
+        val ctor = CaptureRequest.Key::class.java.getDeclaredConstructor(
+            String::class.java,
+            Class::class.java,
+        )
+        ctor.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val key = ctor.newInstance(name, type) as CaptureRequest.Key<T>
+        setCaptureRequestOption(key, value)
+    }
+}
+
+@OptIn(ExperimentalCamera2Interop::class)
 fun CaptureRequestOptions.Builder.setVideoStabilizationMode(
     videoStabilizationMode: VideoStabilizationMode?,
     camera: Camera? = null,
 ) = apply {
+    // Universal vendor client & MFNR hints (ignored safely if HAL does not expose them)
+    trySetVendorKey("samsung.android.control.cameraClientIndex", Int::class.javaObjectType, 1)
+    trySetVendorKey(
+        "org.quic.camera.CustomNoiseReduction.CustomNoiseReduction",
+        Byte::class.javaObjectType,
+        1.toByte()
+    )
+
     videoStabilizationMode?.let { mode ->
         val eisMode = when (mode) {
             VideoStabilizationMode.OFF,
@@ -65,6 +91,14 @@ fun CaptureRequestOptions.Builder.setVideoStabilizationMode(
                 }
         }
         setCaptureRequestOption(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, eisMode)
+
+        val eisEnabled = if (eisMode != CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF) {
+            1.toByte()
+        } else {
+            0.toByte()
+        }
+        trySetVendorKey("org.quic.camera.eis3enable.EISV3Enable", Byte::class.javaObjectType, eisEnabled)
+        trySetVendorKey("org.codeaurora.qcamera3.eis3.enable", Byte::class.javaObjectType, eisEnabled)
 
         if (camera?.supportsOis == true) {
             setCaptureRequestOption(
